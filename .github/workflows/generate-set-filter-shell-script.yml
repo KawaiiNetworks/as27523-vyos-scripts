@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: set-filter.sh
-          path: set-filter.sh
+          path: filter/set-filter.sh
 
       - name: Update nightly release
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -46,5 +46,5 @@ jobs:
           prerelease: true
           title: "nightly filter"
           files: |
-            set-filter.sh
-            generate-filter.log
+            filter/set-filter.sh
+            filter/generate-filter.log

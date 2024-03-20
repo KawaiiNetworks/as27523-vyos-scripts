@@ -317,4 +317,4 @@ source /opt/vyatta/etc/functions/script-template
 
     with open(os.path.join(work_dir, "set-filter.sh"), "w", encoding="utf-8") as f:
         f.write(script)
-    print("set_filter.sh generated.")
+    print("set-filter.sh generated.")
