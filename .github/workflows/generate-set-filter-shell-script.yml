@@ -27,7 +27,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo bash install-dependencies.sh
+          bash install-dependencies.sh
 
       - name: Generate script
         run: python generate.py

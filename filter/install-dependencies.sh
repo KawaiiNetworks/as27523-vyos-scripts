@@ -1,4 +1,6 @@
 #!/bin/bash
 
-apt-get update
-apt-get install -y curl bgpq4
+sudo apt-get update
+sudo apt-get install -y curl bgpq4
+
+pip install -r requirements.txt
