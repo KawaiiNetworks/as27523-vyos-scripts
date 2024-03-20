@@ -184,6 +184,7 @@ def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=Fals
             if config["as-set"]["member-limit-violation"] == "accept":
                 full_vyos_cmd += f"""
                 set policy {pl} {fn} rule 10 action permit
+                set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
                 """
                 print(
                     f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will accept all prefix."
@@ -192,6 +193,7 @@ def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=Fals
             elif config["as-set"]["member-limit-violation"] == "deny":
                 full_vyos_cmd += f"""
                 set policy {pl} {fn} rule 10 action deny
+                set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
                 """
                 print(
                     f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will deny all prefix except {asn}."
@@ -222,6 +224,7 @@ def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=Fals
     else:
         full_vyos_cmd += f"""
         set policy {pl} {fn} rule 10 action deny
+        set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
         """
         print(
             f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
