@@ -4,6 +4,13 @@ import subprocess
 import json
 import yaml
 import time
+from copy import deepcopy
+
+
+work_dir = os.path.dirname(os.path.abspath(__file__))
+config = yaml.safe_load(
+    open(os.path.join(work_dir, "config.yaml"), "r", encoding="utf-8")
+)
 
 asset_name_map = {}
 cone_map = {}
@@ -16,42 +23,53 @@ def get_asset_name(asn):
     time.sleep(5)
 
     if asn in asset_name_map:
-        return asset_name_map[asn]
+        return deepcopy(asset_name_map[asn])
 
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
 
     response = requests.get(url, timeout=10)
-    data = response.json()
-    asset_name_map[asn] = data["data"][0]["irr_as_set"]
-    print(f"AS{asn} as-set name: {asset_name_map[asn]}")
-    return asset_name_map[asn]
+    res = response.json()["data"][0]["irr_as_set"].split()
+    new_res = []
+    for n in res:
+        if "::" in n:
+            new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
+        else:
+            new_res.append(n)
+
+    asset_name_map[asn] = new_res
+    print(f"AS{asn} as-set name: {new_res}")
+    return deepcopy(new_res)
 
 
 def get_as_set_number(asn):
     """use bgpq4 to get as-set number"""
 
     if asn in cone_map:
-        return cone_map[asn]
+        return deepcopy(cone_map[asn])
 
-    asset_name = get_asset_name(asn)
-    if not asset_name:
+    asset_name_list = get_asset_name(asn)
+    if not asset_name_list:
         cone_map[asn] = [asn]
         print(f"AS{asn} cone list: {cone_map[asn]}")
         return cone_map[asn]
 
-    cmd = f"bgpq4 -jt {asset_name}"
+    res = []
 
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-    )
-    cone_map[asn] = json.loads(result.stdout)["NN"]
-    print(f"AS{asn} cone list: {cone_map[asn]}")
-    return cone_map[asn]
+    for asset_name in asset_name_list:
+        cmd = f"bgpq4 -jt {asset_name}"
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+        )
+        res += json.loads(result.stdout)["NN"]
+    res = sorted(list(set(res)))
+    cone_map[asn] = res
+    print(f"AS{asn} cone list: {res}")
+    return deepcopy(res)
 
 
 def get_as_path(asn):
@@ -68,6 +86,32 @@ def get_as_path(asn):
         cone_list.remove(asn)
     cone_list = [str(x) for x in cone_list]
 
+    if len(cone_list) > config["as-set"]["member-limit"]:
+        if config["as-set"]["member-limit-violation"] == "accept":
+            full_vyos_cmd += f"""
+            set policy as-path-list AS{asn}-IN rule 20 action permit
+            set policy as-path-list AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
+            """
+            print(
+                f"Warn: AS{asn} as-path filter generated. But cone member is {len(cone_list)}, filter will accept all as-path."
+            )
+            return full_vyos_cmd
+        elif config["as-set"]["member-limit-violation"] == "deny":
+            full_vyos_cmd += f"""
+            set policy as-path-list AS{asn}-IN rule 20 action deny
+            set policy as-path-list AS{asn}-IN rule 20 regex '.*'
+            """
+            print(
+                f"Warn: AS{asn} as-path filter generated. But cone member is {len(cone_list)}, filter will deny all as-path except {asn}."
+            )
+            return full_vyos_cmd
+        elif config["as-set"]["member-limit-violation"] == "ignore":
+            pass
+        else:
+            raise ValueError(
+                "as-set member-limit-violation must be accept, deny or ignore"
+            )
+
     if len(cone_list) > 0:
         full_vyos_cmd += f"""
         set policy as-path-list AS{asn}-IN rule 20 action permit
@@ -81,7 +125,7 @@ def get_prefix_matrix(ipversion, asn):
     """use bgpq4 to get prefix matrix"""
 
     if (ipversion, asn) in prefix_matrix_map:
-        return prefix_matrix_map[(ipversion, asn)]
+        return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
     cmd = rf'bgpq4 -{ipversion} -A -F "%n,%l,%a,%A,%N,%m,%i\n" as{asn} -l AS{asn}'
     prefix_matrix = []
@@ -102,60 +146,90 @@ def get_prefix_matrix(ipversion, asn):
         raise e
     prefix_matrix_map[(ipversion, asn)] = prefix_matrix
     print(f"AS{asn} prefix{ipversion} matrix generated.")
-    return prefix_matrix
+    return deepcopy(prefix_matrix)
 
 
 def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=False):
     """use bgpq4 to get prefix list filter"""
+
+    def vyos_cmd(network, length, ge, le, object_name, object_mask, invert_mask, rule):
+        r = str(rule)
+        return f"""
+        set policy {pl} {fn} rule {r} action permit
+        set policy {pl} {fn} rule {r} prefix {network}/{length}
+        set policy {pl} {fn} rule {r} ge {ge}
+        set policy {pl} {fn} rule {r} le {max_length if max_length else le}
+        """
+
+    if cone:
+        fn = filter_name if filter_name else f"AS{asn}-CONE"
+    else:
+        fn = filter_name if filter_name else f"AS{asn}"
+
+    if ipversion == 4:
+        pl = "prefix-list"
+    elif ipversion == 6:
+        pl = "prefix-list6"
+    else:
+        raise ValueError("ipversion must be 4 or 6")
+
+    full_vyos_cmd = f"delete policy {pl} {fn}\n"
+
+    if cone:
+        cone_list = get_as_set_number(asn)
+        if asn in cone_list:
+            cone_list.remove(asn)
+
+        if len(cone_list) > config["as-set"]["member-limit"]:
+            if config["as-set"]["member-limit-violation"] == "accept":
+                full_vyos_cmd += f"""
+                set policy {pl} {fn} rule 10 action permit
+                """
+                print(
+                    f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will accept all prefix."
+                )
+                return full_vyos_cmd
+            elif config["as-set"]["member-limit-violation"] == "deny":
+                full_vyos_cmd += f"""
+                set policy {pl} {fn} rule 10 action deny
+                """
+                print(
+                    f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will deny all prefix except {asn}."
+                )
+                return full_vyos_cmd
+            elif config["as-set"]["member-limit-violation"] == "ignore":
+                pass
+            else:
+                raise ValueError(
+                    "as-set member-limit-violation must be accept, deny or ignore"
+                )
 
     if cone:
         cone_asn_list = get_as_set_number(asn)
         prefix_matrix = []
         for x in cone_asn_list:
             prefix_matrix.extend(get_prefix_matrix(ipversion, x))
-        fn = filter_name if filter_name else f"AS{asn}-CONE"
     else:
         prefix_matrix = get_prefix_matrix(ipversion, asn)
-        fn = filter_name if filter_name else f"AS{asn}"
 
-    full_vyos_cmd = ""
-
-    if ipversion == 4:
-        full_vyos_cmd += f"delete policy prefix-list {fn}\n"
-    elif ipversion == 6:
-        full_vyos_cmd += f"delete policy prefix-list6 {fn}\n"
+    if len(prefix_matrix) > 0:
+        c = 1
+        for prefix in prefix_matrix:
+            full_vyos_cmd += vyos_cmd(*prefix, c)
+            c += 1
+        del c
+        print(f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated.")
     else:
-        raise ValueError("ipversion must be 4 or 6")
-
-    def vyos_cmd(network, length, ge, le, object_name, object_mask, invert_mask, rule):
-        r = str(rule)
-        if ipversion == 4:
-            return f"""
-            set policy prefix-list {fn} rule {r} action permit
-            set policy prefix-list {fn} rule {r} prefix {network}/{length}
-            set policy prefix-list {fn} rule {r} ge {ge}
-            set policy prefix-list {fn} rule {r} le {max_length if max_length else le}
-            """
-        elif ipversion == 6:
-            return f"""
-            set policy prefix-list6 {fn} rule {r} action permit
-            set policy prefix-list6 {fn} rule {r} prefix {network}/{length}
-            set policy prefix-list6 {fn} rule {r} ge {ge}
-            set policy prefix-list6 {fn} rule {r} le {max_length if max_length else le}
-            """
-        else:
-            raise ValueError("ipversion must be 4 or 6")
-
-    c = 1
-    for prefix in prefix_matrix:
-        full_vyos_cmd += vyos_cmd(*prefix, c)
-        c += 1
-    del c
-    print(f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated.")
+        full_vyos_cmd += f"""
+        set policy {pl} {fn} rule 10 action deny
+        """
+        print(
+            f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
+        )
     return full_vyos_cmd
 
 
-def get_as_filter(asn, config):
+def get_as_filter(asn):
     full_vyos_cmd = ""
     full_vyos_cmd += get_as_path(asn)
     full_vyos_cmd += get_prefix_list(4, asn, cone=True)
@@ -170,7 +244,7 @@ def get_as_filter(asn, config):
     set policy route-map FILTER-AS{asn}-IN rule 30 action permit
     set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}
     """
-    if asn in config["peer"]:
+    if config["peer"] and asn in config["peer"]:
         full_vyos_cmd += f"""
         delete policy route-map AS{asn}-PEER-IN
         set policy route-map AS{asn}-PEER-IN rule 10 action permit
@@ -179,7 +253,7 @@ def get_as_filter(asn, config):
         set policy route-map AS{asn}-PEER-IN rule 20 on-match next
         set policy route-map AS{asn}-PEER-IN rule 20 call FILTER-AS{asn}-IN
         """
-    elif asn in config["downstream"]:
+    elif config["downstream"] and asn in config["downstream"]:
         full_vyos_cmd += f"""
         delete policy route-map AS{asn}-DOWNSTREAM-IN
         set policy route-map AS{asn}-DOWNSTREAM-IN rule 10 action permit
@@ -192,11 +266,13 @@ def get_as_filter(asn, config):
 
 
 if __name__ == "__main__":
-    work_dir = os.path.dirname(os.path.abspath(__file__))
-    config = yaml.safe_load(
-        open(os.path.join(work_dir, "config.yaml"), "r", encoding="utf-8")
-    )
     local_asn = config["local-asn"]
+
+    commonpolicy = (
+        open(os.path.join(work_dir, "commonpolicy.sh"), "r", encoding="utf-8")
+        .read()
+        .replace("%ASN%", str(local_asn))
+    )
 
     configure = ""
 
@@ -215,13 +291,15 @@ if __name__ == "__main__":
     connected_asns = peers + downstreams
     connected_asns = sorted(list(set(connected_asns)))
     for asn in connected_asns:
-        configure += get_as_filter(asn, config)
+        configure += get_as_filter(asn)
 
     configure = "\n".join(
         [line.strip() for line in configure.splitlines() if line.strip()]
     )
 
-    configure = "configure\n" + configure + "\ncommit\nexit\n"
+    configure = "\nconfigure\n" + commonpolicy + configure + "\ncommit\nexit\n"
+
+    #################################
 
     script_start = r"""#!/bin/vbash
 
@@ -233,6 +311,10 @@ source /opt/vyatta/etc/functions/script-template
 """
     script_end = r"""exit"""
 
-    with open(os.path.join(work_dir, "set_filter.sh"), "w", encoding="utf-8") as f:
-        f.write(configure)
+    #################################
+
+    script = script_start + configure + script_end
+
+    with open(os.path.join(work_dir, "set-filter.sh"), "w", encoding="utf-8") as f:
+        f.write(script)
     print("set_filter.sh generated.")

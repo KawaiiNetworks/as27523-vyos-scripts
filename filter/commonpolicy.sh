@@ -261,7 +261,7 @@ set policy route-map FILTER-IBGP rule 20 match ip address prefix-list 'LOCAL-ASN
 set policy route-map FILTER-IBGP rule 30 action 'permit'
 set policy route-map FILTER-IBGP rule 30 match ipv6 address prefix-list 'LOCAL-ALLOWED-PREFIX6'
 set policy route-map FILTER-IBGP rule 40 action 'permit'
-set policy route-map FILTER-IBGP rule 50 match ipv6 address prefix-list 'LOCAL-ASN-PREFIX6'
+set policy route-map FILTER-IBGP rule 40 match ipv6 address prefix-list 'LOCAL-ASN-PREFIX6'
 set policy route-map FILTER-IBGP rule 100 action 'permit'
 set policy route-map FILTER-IBGP rule 100 call 'REJECT-BOGONS'
 

@@ -30,7 +30,7 @@ jobs:
           bash install-dependencies.sh
 
       - name: Generate script
-        run: python generate.py
+        run: python generate.py | tee generate-filter.log
 
       - name: Upload script to GitHub Packages
         uses: actions/upload-artifact@v4
@@ -45,4 +45,6 @@ jobs:
           automatic_release_tag: "nightly"
           prerelease: true
           title: "nightly filter"
-          files: "set-filter.sh"
+          files: |
+            set-filter.sh
+            generate-filter.log

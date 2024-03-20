@@ -1,7 +1,11 @@
 local-asn: 203023
 
+as-set:
+  member-limit: 1000
+  member-limit-violation: accept # accept, deny, ignore
+
 peer:
-  - 44324
+  # - 6939
 
 downstream:
-  - 216056
+  - 27523
