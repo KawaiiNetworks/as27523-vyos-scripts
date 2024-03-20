@@ -1,0 +1,48 @@
+name: Generate and Upload set-filter.sh
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 0,12 * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: filter
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          bash install-dependencies.sh
+
+      - name: Generate script
+        run: python generate.py
+
+      - name: Upload script to GitHub Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: set-filter.sh
+          path: set-filter.sh
+
+      - name: Update nightly release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "nightly"
+          prerelease: true
+          title: "nightly filter"
+          files: "set-filter.sh"

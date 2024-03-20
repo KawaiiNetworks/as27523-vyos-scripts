@@ -1,0 +1,7 @@
+local-asn: 203023
+
+peer:
+  - 44324
+
+downstream:
+  - 216056
