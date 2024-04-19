@@ -243,9 +243,9 @@ def get_as_filter(asn):
     set policy route-map FILTER-AS{asn}-IN rule 10 match as-path AS{asn}-IN
     set policy route-map FILTER-AS{asn}-IN rule 10 on-match next
     set policy route-map FILTER-AS{asn}-IN rule 20 action permit
-    set policy route-map FILTER-AS{asn}-IN rule 20 match ip address prefix-list AS{asn}
+    set policy route-map FILTER-AS{asn}-IN rule 20 match ip address prefix-list AS{asn}-CONE
     set policy route-map FILTER-AS{asn}-IN rule 30 action permit
-    set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}
+    set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}-CONE
     """
     if config["peer"] and asn in config["peer"]:
         full_vyos_cmd += f"""
