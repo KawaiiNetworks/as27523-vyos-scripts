@@ -281,11 +281,13 @@ if __name__ == "__main__":
 
     configure += get_prefix_list(4, local_asn, filter_name="LOCAL-ASN-CONE", cone=True)
     configure += get_prefix_list(6, local_asn, filter_name="LOCAL-ASN-CONE", cone=True)
+    configure += get_prefix_list(4, local_asn, filter_name="LOCAL-ASN-PREFIX4")
+    configure += get_prefix_list(6, local_asn, filter_name="LOCAL-ASN-PREFIX6")
     configure += get_prefix_list(
-        4, local_asn, max_length=24, filter_name="LOCAL-ASN-PREFIX4"
+        4, local_asn, max_length=32, filter_name="LOCAL-ASN-PREFIX4-le32"
     )
     configure += get_prefix_list(
-        6, local_asn, max_length=128, filter_name="LOCAL-ASN-PREFIX6"
+        6, local_asn, max_length=128, filter_name="LOCAL-ASN-PREFIX6-le128"
     )
 
     peers = config["peer"] or []
