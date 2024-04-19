@@ -1,8 +1,9 @@
 local-asn: 27523
 
 as-set:
-  member-limit: 1000
-  member-limit-violation: accept # accept, deny, ignore
+  member-limit: 300
+  prefix-limit: 300
+  limit-violation: accept # accept, deny
 
 peer:
   - 6939

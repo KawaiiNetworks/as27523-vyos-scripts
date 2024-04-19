@@ -86,8 +86,8 @@ def get_as_path(asn):
         cone_list.remove(asn)
     cone_list = [str(x) for x in cone_list]
 
-    if len(cone_list) > config["as-set"]["member-limit"]:
-        if config["as-set"]["member-limit-violation"] == "accept":
+    if len(cone_list) + 1 > config["as-set"]["member-limit"]:
+        if config["as-set"]["limit-violation"] == "accept":
             full_vyos_cmd += f"""
             set policy as-path-list AS{asn}-IN rule 20 action permit
             set policy as-path-list AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
@@ -96,7 +96,7 @@ def get_as_path(asn):
                 f"Warn: AS{asn} as-path filter generated. But cone member is {len(cone_list)}, filter will accept all as-path."
             )
             return full_vyos_cmd
-        elif config["as-set"]["member-limit-violation"] == "deny":
+        elif config["as-set"]["limit-violation"] == "deny":
             full_vyos_cmd += f"""
             set policy as-path-list AS{asn}-IN rule 20 action deny
             set policy as-path-list AS{asn}-IN rule 20 regex '.*'
@@ -105,12 +105,8 @@ def get_as_path(asn):
                 f"Warn: AS{asn} as-path filter generated. But cone member is {len(cone_list)}, filter will deny all as-path except {asn}."
             )
             return full_vyos_cmd
-        elif config["as-set"]["member-limit-violation"] == "ignore":
-            pass
         else:
-            raise ValueError(
-                "as-set member-limit-violation must be accept, deny or ignore"
-            )
+            raise ValueError("as-set limit-violation must be accept, deny")
 
     if len(cone_list) > 0:
         full_vyos_cmd += f"""
@@ -127,7 +123,7 @@ def get_prefix_matrix(ipversion, asn):
     if (ipversion, asn) in prefix_matrix_map:
         return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
-    cmd = rf'bgpq4 -{ipversion} -A -F "%n,%l,%a,%A,%N,%m,%i\n" as{asn} -l AS{asn}'
+    cmd = rf'bgpq4 -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
     prefix_matrix = []
     try:
         result = subprocess.run(
@@ -141,7 +137,7 @@ def get_prefix_matrix(ipversion, asn):
         res = result.stdout.splitlines()
         res = [x for x in res if x]
         for line in res:
-            prefix_matrix.append(line.split(","))
+            prefix_matrix.append(tuple(line.split(",")))
     except Exception as e:
         raise e
     prefix_matrix_map[(ipversion, asn)] = prefix_matrix
@@ -152,7 +148,7 @@ def get_prefix_matrix(ipversion, asn):
 def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=False):
     """use bgpq4 to get prefix list filter"""
 
-    def vyos_cmd(network, length, ge, le, object_name, object_mask, invert_mask, rule):
+    def vyos_cmd(network, length, ge, le, object_mask, invert_mask, rule):
         r = str(rule)
         return f"""
         set policy {pl} {fn} rule {r} action permit
@@ -160,6 +156,26 @@ def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=Fals
         set policy {pl} {fn} rule {r} ge {ge}
         set policy {pl} {fn} rule {r} le {max_length if max_length else le}
         """
+
+    def vyos_cmd_when_limit_violation(pl, fn):
+        if config["as-set"]["limit-violation"] == "accept":
+            print(
+                f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone number/prefix number is too large, filter will accept all prefix."
+            )
+            return f"""
+            set policy {pl} {fn} rule 10 action permit
+            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
+            """
+        elif config["as-set"]["limit-violation"] == "deny":
+            print(
+                f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone number/prefix number is too large, filter will deny all prefix except {asn}."
+            )
+            return f"""
+            set policy {pl} {fn} rule 10 action deny
+            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
+            """
+        else:
+            raise ValueError("as-set limit-violation must be accept, deny")
 
     if cone:
         fn = filter_name if filter_name else f"AS{asn}-CONE"
@@ -176,44 +192,22 @@ def get_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=Fals
     full_vyos_cmd = f"delete policy {pl} {fn}\n"
 
     if cone:
-        cone_list = get_as_set_number(asn)
-        if asn in cone_list:
-            cone_list.remove(asn)
-
-        if len(cone_list) > config["as-set"]["member-limit"]:
-            if config["as-set"]["member-limit-violation"] == "accept":
-                full_vyos_cmd += f"""
-                set policy {pl} {fn} rule 10 action permit
-                set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
-                """
-                print(
-                    f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will accept all prefix."
-                )
-                return full_vyos_cmd
-            elif config["as-set"]["member-limit-violation"] == "deny":
-                full_vyos_cmd += f"""
-                set policy {pl} {fn} rule 10 action deny
-                set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
-                """
-                print(
-                    f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone member is {len(cone_list)}, filter will deny all prefix except {asn}."
-                )
-                return full_vyos_cmd
-            elif config["as-set"]["member-limit-violation"] == "ignore":
-                pass
-            else:
-                raise ValueError(
-                    "as-set member-limit-violation must be accept, deny or ignore"
-                )
-
-    if cone:
         cone_asn_list = get_as_set_number(asn)
+
+        if len(cone_asn_list) > config["as-set"]["member-limit"]:
+            full_vyos_cmd += vyos_cmd_when_limit_violation(pl, fn)
+            return full_vyos_cmd
+
         prefix_matrix = []
         for x in cone_asn_list:
             prefix_matrix.extend(get_prefix_matrix(ipversion, x))
+        if len(prefix_matrix) > config["as-set"]["prefix-limit"]:
+            full_vyos_cmd += vyos_cmd_when_limit_violation(pl, fn)
+            return full_vyos_cmd
     else:
         prefix_matrix = get_prefix_matrix(ipversion, asn)
 
+    prefix_matrix = list(set(prefix_matrix))
     if len(prefix_matrix) > 0:
         c = 1
         for prefix in prefix_matrix:
