@@ -1,3 +1,3 @@
 #!/bin/bash
 
-curl -s -L https://github.com/KawaiiNetworks/vyos-scripts/releases/download/nightly/set-filter.sh | vbash
+wget https://github.com/KawaiiNetworks/vyos-scripts/releases/download/nightly/set-filter.sh && vbash set-filter.sh && rm set-filter.sh
