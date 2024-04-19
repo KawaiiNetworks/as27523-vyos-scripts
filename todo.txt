@@ -1,0 +1,2 @@
+rpki;
+auto configure bgp and bgp session;

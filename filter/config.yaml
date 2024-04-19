@@ -6,6 +6,8 @@ as-set:
 
 peer:
   - 6939
+  - 15169
+  - 13335
   - 44324
 
 downstream:
