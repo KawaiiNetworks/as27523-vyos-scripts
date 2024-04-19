@@ -1,11 +1,11 @@
-local-asn: 203023
+local-asn: 27523
 
 as-set:
   member-limit: 1000
   member-limit-violation: accept # accept, deny, ignore
 
 peer:
-  # - 6939
+  - 6939
 
 downstream:
-  # - 27523
+  - 203023
