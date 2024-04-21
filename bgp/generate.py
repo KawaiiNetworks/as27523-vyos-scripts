@@ -312,7 +312,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor):
     ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
     return f"""
     delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]} ipv{ipversion} ibgp"
+    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-ibgp"
     set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
     set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
     set protocols bgp neighbor {neighbor["peer-address"]} solo
@@ -330,7 +330,7 @@ def get_vyos_protocol_bgp_upstream(neighbor):
     ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
     return f"""
     delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]} ipv{ipversion} Upstream"
+    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Upstream"
     set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
     set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
     set protocols bgp neighbor {neighbor["peer-address"]} solo
@@ -348,7 +348,7 @@ def get_vyos_protocol_bgp_routeserver(neighbor):
     ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
     return f"""
     delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]} ipv{ipversion} RS"
+    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-RS"
     set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
     set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
     set protocols bgp neighbor {neighbor["peer-address"]} solo
@@ -366,7 +366,7 @@ def get_vyos_protocol_bgp_peer(neighbor):
     ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
     return f"""
     delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]} ipv{ipversion} Peer"
+    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Peer"
     set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
     set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
     set protocols bgp neighbor {neighbor["peer-address"]} solo
@@ -384,7 +384,7 @@ def get_vyos_protocol_bgp_downstream(neighbor):
     ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
     return f"""
     delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]} ipv{ipversion} Downstream"
+    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Downstream"
     set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
     set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
     set protocols bgp neighbor {neighbor["peer-address"]} solo
