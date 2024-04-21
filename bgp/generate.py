@@ -83,7 +83,7 @@ def get_as_set_member(asn):
     res = []
 
     for asset_name in asset_name_list:
-        cmd = f"bgpq4 -jt {asset_name}"
+        cmd = f"bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE -jt {asset_name}"
         result = subprocess.run(
             cmd,
             shell=True,
@@ -105,7 +105,7 @@ def get_prefix_matrix(ipversion, asn):
     if (ipversion, asn) in prefix_matrix_map:
         return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
-    cmd = rf'bgpq4 -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
+    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
     prefix_matrix = []
     try:
         result = subprocess.run(
@@ -238,7 +238,7 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
     else:
         prefix_matrix = get_prefix_matrix(ipversion, asn)
 
-    prefix_matrix = list(set(prefix_matrix))
+    prefix_matrix = sorted(list(set(prefix_matrix)), key=lambda x: x[0])
     if len(prefix_matrix) > 0:
         c = 1
         for prefix in prefix_matrix:
