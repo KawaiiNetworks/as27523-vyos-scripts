@@ -238,7 +238,7 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
     else:
         prefix_matrix = get_prefix_matrix(ipversion, asn)
 
-    prefix_matrix = sorted(list(set(prefix_matrix)), key=lambda x: x[0])
+    prefix_matrix = sorted(list(set(prefix_matrix)))
     if len(prefix_matrix) > 0:
         c = 1
         for prefix in prefix_matrix:
