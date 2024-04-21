@@ -1,2 +1,1 @@
-rpki;
-auto configure bgp and bgp session;
+完善ibgp filter;

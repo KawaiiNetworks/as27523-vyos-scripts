@@ -1,0 +1,46 @@
+local-asn: 27523
+
+as-set:
+  member-limit: 250
+  prefix-limit: 250
+  limit-violation: accept # accept, deny
+
+router:
+  - name: core.mci.atlas.projectk.org
+    protocols:
+      rpki:
+        - server: 74.80.181.236
+          port: 8082
+          preference: 10
+      bgp:
+        ibgp: []
+        upstream:
+          - asn: 6939
+            peer-address: 2001:504:1b:1::5
+            update-source: eth2
+        routeserver:
+          - asn: 40542
+            peer-address: 206.51.7.126
+            update-source: eth2
+          - asn: 40542
+            peer-address: 2001:504:1b:1::126
+            update-source: eth2
+        peer:
+          - asn: 6939
+            peer-address: 206.51.7.5
+            update-source: eth2
+          - asn: 13335
+            peer-address: 206.51.7.34
+            update-source: eth2
+          - asn: 13335
+            peer-address: 2001:504:1b:1::34
+            update-source: eth2
+          - asn: 44324
+            peer-address: 206.51.7.208
+            update-source: eth2
+          - asn: 44324
+            peer-address: 2001:504:1b:1::208
+            update-source: eth2
+        downstream:
+          - asn: 203023
+            manual: true

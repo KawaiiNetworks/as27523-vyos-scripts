@@ -1,4 +1,4 @@
-name: Generate and Upload set-filter.sh
+name: Generate and Upload set-bgp.sh
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: filter
+        working-directory: bgp
 
     steps:
       - name: Checkout repository
@@ -30,13 +30,13 @@ jobs:
           bash install-dependencies.sh
 
       - name: Generate script
-        run: python generate.py | tee generate-filter.log
+        run: mkdir outputs && python generate.py | tee outputs/generate-bgp.log
 
-      - name: Upload script to GitHub Packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: set-filter.sh
-          path: filter/set-filter.sh
+      # - name: Upload script to GitHub Packages
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: set-bgp.sh
+      #     path: bgp/set-bgp.sh
 
       - name: Update nightly release
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -44,7 +44,7 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "nightly"
           prerelease: true
-          title: "nightly filter"
+          title: "nightly bgp configuration"
           files: |
-            filter/set-filter.sh
-            filter/generate-filter.log
+            bgp/outputs/generate-bgp.log
+            bgp/outputs/*.sh
