@@ -18,6 +18,12 @@ router:
           - asn: 6939
             peer-address: 2001:504:1b:1::5
             update-source: eth2
+          - asn: 13737
+            peer-address: 74.80.181.233
+            update-source: eth0
+          - asn: 13737
+            peer-address: 2620:11F:700F:1::8
+            update-source: eth0
         routeserver:
           - asn: 40542
             peer-address: 206.51.7.126
