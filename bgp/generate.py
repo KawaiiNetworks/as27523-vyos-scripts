@@ -400,7 +400,9 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     """cmd to configure vyos protocol bgp"""
 
     cmd = f"""
-    delete protocols bgp
+    delete protocols bgp address-family
+    delete protocols bgp parameters
+    delete protocols bgp system-as
     set protocols bgp address-family ipv4-unicast redistribute connected
     set protocols bgp address-family ipv4-unicast redistribute static
     set protocols bgp address-family ipv6-unicast redistribute connected
