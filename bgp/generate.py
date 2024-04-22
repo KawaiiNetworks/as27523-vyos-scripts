@@ -272,24 +272,7 @@ def get_vyos_as_filter(asn, _role):
     set policy route-map FILTER-AS{asn}-IN rule 30 action permit
     set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}-CONE
     """
-    if "peer" in _role:
-        full_vyos_cmd += f"""
-        delete policy route-map AS{asn}-PEER-IN
-        set policy route-map AS{asn}-PEER-IN rule 10 action permit
-        set policy route-map AS{asn}-PEER-IN rule 10 call PEER-IN
-        set policy route-map AS{asn}-PEER-IN rule 20 action permit
-        set policy route-map AS{asn}-PEER-IN rule 20 on-match next
-        set policy route-map AS{asn}-PEER-IN rule 20 call FILTER-AS{asn}-IN
-        """
-    elif "downstream" in _role:
-        full_vyos_cmd += f"""
-        delete policy route-map AS{asn}-DOWNSTREAM-IN
-        set policy route-map AS{asn}-DOWNSTREAM-IN rule 10 action permit
-        set policy route-map AS{asn}-DOWNSTREAM-IN rule 10 call DOWNSTREAM-IN
-        set policy route-map AS{asn}-DOWNSTREAM-IN rule 20 action permit
-        set policy route-map AS{asn}-DOWNSTREAM-IN rule 20 on-match next
-        set policy route-map AS{asn}-DOWNSTREAM-IN rule 20 call FILTER-AS{asn}-IN
-        """
+
     return full_vyos_cmd
 
 
@@ -306,94 +289,200 @@ def get_vyos_protocol_rpki(server_list):
     return cmd
 
 
-def get_vyos_protocol_bgp_ibgp(neighbor):
+def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp ibgp"""
 
-    ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
-    return f"""
-    delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-ibgp"
-    set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
-    set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} solo
-    set protocols bgp neighbor {neighbor["peer-address"]} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map export IBGP-OUT
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map import IBGP-IN
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    asn = local_asn
+    neighbor_address = neighbor["neighbor-address"]
+    route_map_name = f"IBGP-IN-{neighbor_id}"
+
+    final_filter = f"""
+    delete policy route-map {route_map_name}
+    set policy route-map {route_map_name} rule 10 action permit
+    set policy route-map {route_map_name} rule 10 call IBGP-IN
     """
 
+    if "local-pref" in neighbor:
+        final_filter += f"""
+        set policy route-map {route_map_name} rule 10 on-match next
+        set policy route-map {route_map_name} rule 30 action permit
+        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
+        """
 
-def get_vyos_protocol_bgp_upstream(neighbor):
+    ipversion = ipaddress.ip_address(neighbor_address).version
+
+    bgp_cmd = f"""
+    delete protocols bgp neighbor {neighbor_address}
+    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-ibgp"
+    set protocols bgp neighbor {neighbor_address} graceful-restart enable
+    set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    set protocols bgp neighbor {neighbor_address} solo
+    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export IBGP-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    """
+
+    return final_filter + bgp_cmd
+
+
+def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp upstream"""
 
-    ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
-    return f"""
-    delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Upstream"
-    set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
-    set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} solo
-    set protocols bgp neighbor {neighbor["peer-address"]} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map export UPSTREAM-OUT
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map import UPSTREAM-IN
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    asn = neighbor["asn"]
+    neighbor_address = neighbor["neighbor-address"]
+    route_map_name = f"AS{asn}-UPSTREAM-IN-{neighbor_id}"
+
+    final_filter = f"""
+    delete policy route-map {route_map_name}
+    set policy route-map {route_map_name} rule 10 action permit
+    set policy route-map {route_map_name} rule 10 call UPSTREAM-IN
     """
 
+    if "local-pref" in neighbor:
+        final_filter += f"""
+        set policy route-map {route_map_name} rule 10 on-match next
+        set policy route-map {route_map_name} rule 30 action permit
+        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
+        """
 
-def get_vyos_protocol_bgp_routeserver(neighbor):
+    ipversion = ipaddress.ip_address(neighbor_address).version
+
+    bgp_cmd = f"""
+    delete protocols bgp neighbor {neighbor_address}
+    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Upstream"
+    set protocols bgp neighbor {neighbor_address} graceful-restart enable
+    set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    set protocols bgp neighbor {neighbor_address} solo
+    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export UPSTREAM-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    """
+
+    return final_filter + bgp_cmd
+
+
+def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp routeserver"""
 
-    ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
-    return f"""
-    delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-RS"
-    set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
-    set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} solo
-    set protocols bgp neighbor {neighbor["peer-address"]} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map export ROUTESERVER-OUT
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map import ROUTESERVER-IN
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    asn = neighbor["asn"]
+    neighbor_address = neighbor["neighbor-address"]
+    route_map_name = f"AS{asn}-ROUTESERVER-IN-{neighbor_id}"
+
+    final_filter = f"""
+    delete policy route-map {route_map_name}
+    set policy route-map {route_map_name} rule 10 action permit
+    set policy route-map {route_map_name} rule 10 call ROUTESERVER-IN
     """
 
+    if "local-pref" in neighbor:
+        final_filter += f"""
+        set policy route-map {route_map_name} rule 10 on-match next
+        set policy route-map {route_map_name} rule 30 action permit
+        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
+        """
 
-def get_vyos_protocol_bgp_peer(neighbor):
+    ipversion = ipaddress.ip_address(neighbor_address).version
+
+    bgp_cmd = f"""
+    delete protocols bgp neighbor {neighbor_address}
+    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-RS"
+    set protocols bgp neighbor {neighbor_address} graceful-restart enable
+    set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    set protocols bgp neighbor {neighbor_address} solo
+    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export ROUTESERVER-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    """
+
+    return final_filter + bgp_cmd
+
+
+def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp peer"""
 
-    ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
-    return f"""
-    delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Peer"
-    set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
-    set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} solo
-    set protocols bgp neighbor {neighbor["peer-address"]} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map export PEER-OUT
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map import AS{neighbor["asn"]}-PEER-IN
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    asn = neighbor["asn"]
+    neighbor_address = neighbor["neighbor-address"]
+    route_map_name = f"AS{asn}-PEER-IN-{neighbor_id}"
+
+    final_filter = f"""
+    delete policy route-map {route_map_name}
+    set policy route-map {route_map_name} rule 10 action permit
+    set policy route-map {route_map_name} rule 10 call PEER-IN
+    set policy route-map {route_map_name} rule 10 on-match next
+    set policy route-map {route_map_name} rule 20 action permit
+    set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
     """
 
+    if "local-pref" in neighbor:
+        final_filter += f"""
+        set policy route-map {route_map_name} rule 20 on-match next
+        set policy route-map {route_map_name} rule 30 action permit
+        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
+        """
 
-def get_vyos_protocol_bgp_downstream(neighbor):
+    ipversion = ipaddress.ip_address(neighbor_address).version
+
+    bgp_cmd = f"""
+    delete protocols bgp neighbor {neighbor_address}
+    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Peer"
+    set protocols bgp neighbor {neighbor_address} graceful-restart enable
+    set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    set protocols bgp neighbor {neighbor_address} solo
+    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export PEER-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    """
+
+    return final_filter + bgp_cmd
+
+
+def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp downstream"""
 
-    ipversion = ipaddress.ip_address(neighbor["peer-address"]).version
-    return f"""
-    delete protocols bgp neighbor {neighbor["peer-address"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} description "AS{neighbor["asn"]}-IPv{ipversion}-Downstream"
-    set protocols bgp neighbor {neighbor["peer-address"]} graceful-restart enable
-    set protocols bgp neighbor {neighbor["peer-address"]} remote-as {neighbor["asn"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} solo
-    set protocols bgp neighbor {neighbor["peer-address"]} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map export DOWNSTREAM-OUT
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast route-map import AS{neighbor["asn"]}-DOWNSTREAM-IN
-    set protocols bgp neighbor {neighbor["peer-address"]} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    asn = neighbor["asn"]
+    neighbor_address = neighbor["neighbor-address"]
+    route_map_name = f"AS{asn}-DOWNSTREAM-IN-{neighbor_id}"
+
+    final_filter = f"""
+    delete policy route-map {route_map_name}
+    set policy route-map {route_map_name} rule 10 action permit
+    set policy route-map {route_map_name} rule 10 call DOWNSTREAM-IN
+    set policy route-map {route_map_name} rule 10 on-match next
+    set policy route-map {route_map_name} rule 20 action permit
+    set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
     """
+
+    if "local-pref" in neighbor:
+        final_filter += f"""
+        set policy route-map {route_map_name} rule 20 on-match next
+        set policy route-map {route_map_name} rule 30 action permit
+        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
+        """
+
+    ipversion = ipaddress.ip_address(neighbor_address).version
+
+    bgp_cmd = f"""
+    delete protocols bgp neighbor {neighbor_address}
+    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Downstream"
+    set protocols bgp neighbor {neighbor_address} graceful-restart enable
+    set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    set protocols bgp neighbor {neighbor_address} solo
+    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export DOWNSTREAM-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
+    """
+
+    return final_filter + bgp_cmd
 
 
 def get_vyos_protocol_bgp(bgp_config, _router_id):
@@ -412,26 +501,26 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     set protocols bgp system-as {local_asn}
     """
 
-    for ibgp_neighbor in bgp_config["ibgp"]:
+    for nid, ibgp_neighbor in enumerate(bgp_config["ibgp"]):
         if "manual" in ibgp_neighbor and ibgp_neighbor["manual"]:
             continue
-        cmd += get_vyos_protocol_bgp_ibgp(ibgp_neighbor)
-    for upstream_neighbor in bgp_config["upstream"]:
+        cmd += get_vyos_protocol_bgp_ibgp(ibgp_neighbor, nid)
+    for nid, upstream_neighbor in enumerate(bgp_config["upstream"]):
         if "manual" in upstream_neighbor and upstream_neighbor["manual"]:
             continue
-        cmd += get_vyos_protocol_bgp_upstream(upstream_neighbor)
-    for routeserver_neighbor in bgp_config["routeserver"]:
+        cmd += get_vyos_protocol_bgp_upstream(upstream_neighbor, nid)
+    for nid, routeserver_neighbor in enumerate(bgp_config["routeserver"]):
         if "manual" in routeserver_neighbor and routeserver_neighbor["manual"]:
             continue
-        cmd += get_vyos_protocol_bgp_routeserver(routeserver_neighbor)
-    for peer_neighbor in bgp_config["peer"]:
+        cmd += get_vyos_protocol_bgp_routeserver(routeserver_neighbor, nid)
+    for nid, peer_neighbor in enumerate(bgp_config["peer"]):
         if "manual" in peer_neighbor and peer_neighbor["manual"]:
             continue
-        cmd += get_vyos_protocol_bgp_peer(peer_neighbor)
-    for downstream_neighbor in bgp_config["downstream"]:
+        cmd += get_vyos_protocol_bgp_peer(peer_neighbor, nid)
+    for nid, downstream_neighbor in enumerate(bgp_config["downstream"]):
         if "manual" in downstream_neighbor and downstream_neighbor["manual"]:
             continue
-        cmd += get_vyos_protocol_bgp_downstream(downstream_neighbor)
+        cmd += get_vyos_protocol_bgp_downstream(downstream_neighbor, nid)
 
     return cmd
 
