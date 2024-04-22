@@ -56,6 +56,18 @@ router:
             peer-address: 2001:504:1b:1::126
             update-source: eth2
         peer:
+          - asn: 6456
+            peer-address: 206.81.80.10
+            update-source: eth3.2
+          - asn: 6456
+            peer-address: 2001:504:16::1938
+            update-source: eth3.2
+          - asn: 6456
+            peer-address: 206.81.81.41
+            update-source: eth3.2
+          - asn: 6456
+            peer-address: 2001:504:16::297:0:1938
+            update-source: eth3.2
           - asn: 6939
             peer-address: 206.51.7.5
             update-source: eth2
@@ -71,6 +83,12 @@ router:
           - asn: 44324
             peer-address: 2001:504:1b:1::208
             update-source: eth2
+          - asn: 49544
+            peer-address: 206.81.80.117
+            update-source: eth3.2
+          - asn: 49544
+            peer-address: 2001:504:16::c188
+            update-source: eth3.2
         downstream:
           - asn: 203023
             manual: true
