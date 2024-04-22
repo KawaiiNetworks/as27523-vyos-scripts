@@ -501,25 +501,49 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     set protocols bgp system-as {local_asn}
     """
 
-    for nid, ibgp_neighbor in enumerate(bgp_config["ibgp"]):
+    for ibgp_neighbor in bgp_config["ibgp"]:
         if "manual" in ibgp_neighbor and ibgp_neighbor["manual"]:
             continue
+        this_asn_neighbor_list = [
+            n for n in bgp_config["ibgp"] if n["asn"] == ibgp_neighbor["asn"]
+        ]
+        nid = this_asn_neighbor_list.index(ibgp_neighbor)
         cmd += get_vyos_protocol_bgp_ibgp(ibgp_neighbor, nid)
-    for nid, upstream_neighbor in enumerate(bgp_config["upstream"]):
+    for upstream_neighbor in bgp_config["upstream"]:
         if "manual" in upstream_neighbor and upstream_neighbor["manual"]:
             continue
+        this_asn_neighbor_list = [
+            n for n in bgp_config["upstream"] if n["asn"] == upstream_neighbor["asn"]
+        ]
+        nid = this_asn_neighbor_list.index(upstream_neighbor)
         cmd += get_vyos_protocol_bgp_upstream(upstream_neighbor, nid)
-    for nid, routeserver_neighbor in enumerate(bgp_config["routeserver"]):
+    for routeserver_neighbor in bgp_config["routeserver"]:
         if "manual" in routeserver_neighbor and routeserver_neighbor["manual"]:
             continue
+        this_asn_neighbor_list = [
+            n
+            for n in bgp_config["routeserver"]
+            if n["asn"] == routeserver_neighbor["asn"]
+        ]
+        nid = this_asn_neighbor_list.index(routeserver_neighbor)
         cmd += get_vyos_protocol_bgp_routeserver(routeserver_neighbor, nid)
-    for nid, peer_neighbor in enumerate(bgp_config["peer"]):
+    for peer_neighbor in bgp_config["peer"]:
         if "manual" in peer_neighbor and peer_neighbor["manual"]:
             continue
+        this_asn_neighbor_list = [
+            n for n in bgp_config["peer"] if n["asn"] == peer_neighbor["asn"]
+        ]
+        nid = this_asn_neighbor_list.index(peer_neighbor)
         cmd += get_vyos_protocol_bgp_peer(peer_neighbor, nid)
-    for nid, downstream_neighbor in enumerate(bgp_config["downstream"]):
+    for downstream_neighbor in bgp_config["downstream"]:
         if "manual" in downstream_neighbor and downstream_neighbor["manual"]:
             continue
+        this_asn_neighbor_list = [
+            n
+            for n in bgp_config["downstream"]
+            if n["asn"] == downstream_neighbor["asn"]
+        ]
+        nid = this_asn_neighbor_list.index(downstream_neighbor)
         cmd += get_vyos_protocol_bgp_downstream(downstream_neighbor, nid)
 
     return cmd
