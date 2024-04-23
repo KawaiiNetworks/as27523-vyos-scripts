@@ -83,7 +83,9 @@ def get_as_set_member(asn):
     res = []
 
     for asset_name in asset_name_list:
-        cmd = f"bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE -jt {asset_name}"
+        cmd = (
+            f"bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -jt {asset_name}"
+        )
         result = subprocess.run(
             cmd,
             shell=True,
@@ -105,7 +107,7 @@ def get_prefix_matrix(ipversion, asn):
     if (ipversion, asn) in prefix_matrix_map:
         return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
-    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
+    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
     prefix_matrix = []
     try:
         result = subprocess.run(
