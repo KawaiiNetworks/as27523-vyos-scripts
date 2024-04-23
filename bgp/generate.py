@@ -294,6 +294,25 @@ def get_vyos_protocol_rpki(server_list):
     return cmd
 
 
+def vyos_neighbor_optional_attributes(neighbor, route_map_name):
+    """cmd to configure vyos neighbor optional attributes"""
+
+    f = ""
+    if "local-pref" in neighbor:
+        f += f"""
+        set policy route-map {route_map_name} rule 200 set local-preference '{neighbor["local-pref"]}'
+        """
+    if "prepend" in neighbor:
+        f += f"""
+        set policy route-map {route_map_name} rule 200 set as-path prepend '{neighbor["prepend"]}'
+        """
+    if "metric" in neighbor:
+        f += f"""
+        set policy route-map {route_map_name} rule 200 set metric {neighbor["med"]}
+        """
+    return f
+
+
 def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp ibgp"""
 
@@ -305,20 +324,17 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     delete policy route-map {route_map_name}
     set policy route-map {route_map_name} rule 10 action permit
     set policy route-map {route_map_name} rule 10 call IBGP-IN
+    set policy route-map {route_map_name} rule 10 on-match next
+    set policy route-map {route_map_name} rule 200 action permit
     """
 
-    if "local-pref" in neighbor:
-        final_filter += f"""
-        set policy route-map {route_map_name} rule 10 on-match next
-        set policy route-map {route_map_name} rule 30 action permit
-        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
-        """
+    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-ibgp"
+    set protocols bgp neighbor {neighbor_address} description {neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-ibgp"}
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -343,20 +359,17 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     delete policy route-map {route_map_name}
     set policy route-map {route_map_name} rule 10 action permit
     set policy route-map {route_map_name} rule 10 call UPSTREAM-IN
+    set policy route-map {route_map_name} rule 10 on-match next
+    set policy route-map {route_map_name} rule 200 action permit
     """
 
-    if "local-pref" in neighbor:
-        final_filter += f"""
-        set policy route-map {route_map_name} rule 10 on-match next
-        set policy route-map {route_map_name} rule 30 action permit
-        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
-        """
+    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Upstream"
+    set protocols bgp neighbor {neighbor_address} description {neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Upstream"}
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -381,20 +394,17 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
     delete policy route-map {route_map_name}
     set policy route-map {route_map_name} rule 10 action permit
     set policy route-map {route_map_name} rule 10 call ROUTESERVER-IN
+    set policy route-map {route_map_name} rule 10 on-match next
+    set policy route-map {route_map_name} rule 200 action permit
     """
 
-    if "local-pref" in neighbor:
-        final_filter += f"""
-        set policy route-map {route_map_name} rule 10 on-match next
-        set policy route-map {route_map_name} rule 30 action permit
-        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
-        """
+    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-RS"
+    set protocols bgp neighbor {neighbor_address} description {neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-RS"}
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -422,20 +432,17 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     set policy route-map {route_map_name} rule 10 on-match next
     set policy route-map {route_map_name} rule 20 action permit
     set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
+    set policy route-map {route_map_name} rule 20 on-match next
+    set policy route-map {route_map_name} rule 200 action permit
     """
 
-    if "local-pref" in neighbor:
-        final_filter += f"""
-        set policy route-map {route_map_name} rule 20 on-match next
-        set policy route-map {route_map_name} rule 30 action permit
-        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
-        """
+    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Peer"
+    set protocols bgp neighbor {neighbor_address} description {neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Peer"}
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -463,20 +470,17 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     set policy route-map {route_map_name} rule 10 on-match next
     set policy route-map {route_map_name} rule 20 action permit
     set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
+    set policy route-map {route_map_name} rule 20 on-match next
+    set policy route-map {route_map_name} rule 200 action permit
     """
 
-    if "local-pref" in neighbor:
-        final_filter += f"""
-        set policy route-map {route_map_name} rule 20 on-match next
-        set policy route-map {route_map_name} rule 30 action permit
-        set policy route-map {route_map_name} rule 30 set local-preference '{neighbor["local-pref"]}'
-        """
+    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description "AS{asn}-IPv{ipversion}-Downstream"
+    set protocols bgp neighbor {neighbor_address} description {neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Downstream"}
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
