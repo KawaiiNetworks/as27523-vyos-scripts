@@ -334,7 +334,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-ibgp"}'
+    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-ibgp"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -369,7 +369,7 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Upstream"}'
+    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Upstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -404,7 +404,7 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-RS"}'
+    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-RS"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -442,7 +442,7 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Peer"}'
+    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Peer"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
@@ -480,7 +480,7 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-IPv{ipversion}-Downstream"}'
+    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Downstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     set protocols bgp neighbor {neighbor_address} solo
