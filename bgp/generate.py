@@ -250,6 +250,7 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
         full_vyos_cmd += f"""
         set policy {pl} {fn} rule 10 action deny
         set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
+        set policy {pl} {fn} rule 10 le {24 if ipversion == 4 else 48}
         """
         print(
             f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
