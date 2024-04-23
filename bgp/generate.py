@@ -308,7 +308,7 @@ def vyos_neighbor_optional_attributes(neighbor, route_map_name):
         """
     if "metric" in neighbor:
         f += f"""
-        set policy route-map {route_map_name} rule 200 set metric {neighbor["med"]}
+        set policy route-map {route_map_name} rule 200 set metric {neighbor["metric"]}
         """
     return f
 
