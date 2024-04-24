@@ -33,7 +33,7 @@ router:
             neighbor-address: 74.80.181.233
             update-source: eth0
           - asn: 13737
-            neighbor-address: 2620:11F:700F:1::8
+            neighbor-address: 2620:11f:700f:1::8
             update-source: eth0
         routeserver:
           - asn: 33108
