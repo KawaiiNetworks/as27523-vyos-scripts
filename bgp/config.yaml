@@ -114,6 +114,22 @@ router:
           - asn: 13335
             neighbor-address: 2001:504:1b:1::34
             update-source: eth2
+          - asn: 13335
+            description: Cloudflare SIX
+            neighbor-address: 206.81.81.10
+            update-source: eth3.2
+          - asn: 13335
+            description: Cloudflare SIX
+            neighbor-address: 2001:504:16::3417
+            update-source: eth3.2
+          - asn: 13335
+            description: Cloudflare SIX
+            neighbor-address: 206.81.81.58
+            update-source: eth3.2
+          - asn: 13335
+            description: Cloudflare SIX
+            neighbor-address: 2001:504:16::314:0:3417
+            update-source: eth3.2
           - asn: 25668
             neighbor-address: 206.81.80.103
             update-source: eth3.2
