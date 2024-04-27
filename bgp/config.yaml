@@ -16,6 +16,7 @@ router:
         ibgp:
           - description: BGP Tunnel to SEA
             neighbor-address: 169.254.20.2
+            simple-out: true
             local-pref: 180
             update-source: tun10
         upstream:

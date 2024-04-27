@@ -340,7 +340,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export IBGP-OUT
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if ("simple-out" in neighbor and neighbor["simple-out"]) else "IBGP-OUT"}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
