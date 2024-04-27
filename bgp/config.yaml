@@ -28,12 +28,12 @@ router:
           - asn: 6939
             description: HE SIX Upstream
             neighbor-address: 2001:504:16::1b1b
-            metric: +10
+            metric: "+10"
             update-source: eth3.2
           - asn: 6939
             description: HE SIX Jumbo Upstream
             neighbor-address: 2001:504:16:1::1b1b
-            metric: +5
+            metric: "+5"
             update-source: eth3.3
           - asn: 13737
             neighbor-address: 74.80.181.233
@@ -45,22 +45,22 @@ router:
           - asn: 33108
             description: SIX IPv4 RS2
             neighbor-address: 206.81.80.2
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv6 RS2
             neighbor-address: 2001:504:16::2
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv4 RS3
             neighbor-address: 206.81.80.3
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv6 RS3
             neighbor-address: 2001:504:16::3
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 33108
             description: SIX Jumbo IPv4 RS2
@@ -117,22 +117,22 @@ router:
           - asn: 13335
             description: Cloudflare SIX
             neighbor-address: 206.81.81.10
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 13335
             description: Cloudflare SIX
             neighbor-address: 2001:504:16::3417
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 13335
             description: Cloudflare SIX
             neighbor-address: 206.81.81.58
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 13335
             description: Cloudflare SIX
             neighbor-address: 2001:504:16::314:0:3417
-            metric: +5
+            metric: "+5"
             update-source: eth3.2
           - asn: 25668
             neighbor-address: 206.81.80.103
