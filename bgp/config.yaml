@@ -15,7 +15,7 @@ router:
       bgp:
         ibgp:
           - description: BGP Tunnel to SEA
-            neighbor-address: 169.254.23.2
+            neighbor-address: 169.254.20.2
             update-source: tun10
         upstream:
           - asn: 945
@@ -172,7 +172,7 @@ router:
       bgp:
         ibgp:
           - description: BGP Tunnel to MCI
-            neighbor-address: 169.254.23.1
+            neighbor-address: 169.254.20.1
             update-source: tun10
         upstream:
           - asn: 50131
