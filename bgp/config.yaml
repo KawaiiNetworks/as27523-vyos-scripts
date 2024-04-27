@@ -13,7 +13,10 @@ router:
           port: 8082
           preference: 10
       bgp:
-        ibgp: []
+        ibgp:
+          - description: BGP Tunnel to SEA
+            neighbor-address: 169.254.23.2
+            update-source: tun10
         upstream:
           - asn: 945
             neighbor-address: 206.51.7.160
@@ -167,8 +170,13 @@ router:
           port: 8282
           preference: 10
       bgp:
-        ibgp: []
-        upstream: []
+        ibgp:
+          - description: BGP Tunnel to MCI
+            neighbor-address: 169.254.23.1
+            update-source: tun10
+        upstream:
+          - asn: 50131
+            manual: true
         routeserver: []
         peer: []
         downstream: []
