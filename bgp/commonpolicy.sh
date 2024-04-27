@@ -219,6 +219,7 @@ set policy route-map DOWNSTREAM-IN rule 10 on-match next
 set policy route-map DOWNSTREAM-IN rule 20 action 'permit'
 set policy route-map DOWNSTREAM-IN rule 20 set large-community add '%ASN%:0:500'
 set policy route-map DOWNSTREAM-IN rule 20 set local-preference '200'
+set policy route-map DOWNSTREAM-IN rule 20 set metric '1000'
 
 delete policy route-map DOWNSTREAM-OUT
 set policy route-map DOWNSTREAM-OUT rule 1 action 'permit'
@@ -298,6 +299,7 @@ set policy route-map IBGP-IN rule 10 on-match next
 set policy route-map IBGP-IN rule 20 action 'permit'
 set policy route-map IBGP-IN rule 20 set large-community add '%ASN%:0:100'
 set policy route-map IBGP-IN rule 20 set local-preference '90'
+set policy route-map IBGP-IN rule 20 set metric '1000'
 
 delete policy route-map IBGP-OUT
 set policy route-map IBGP-OUT rule 1 action 'permit'
@@ -320,6 +322,7 @@ set policy route-map PEER-IN rule 10 on-match next
 set policy route-map PEER-IN rule 20 action 'permit'
 set policy route-map PEER-IN rule 20 set large-community add '%ASN%:0:400'
 set policy route-map PEER-IN rule 20 set local-preference '160'
+set policy route-map PEER-IN rule 20 set metric '1000'
 
 delete policy route-map PEER-OUT
 set policy route-map PEER-OUT rule 1 action 'permit'
@@ -375,6 +378,7 @@ set policy route-map ROUTESERVER-IN rule 10 on-match next
 set policy route-map ROUTESERVER-IN rule 20 action 'permit'
 set policy route-map ROUTESERVER-IN rule 20 set large-community add '%ASN%:0:300'
 set policy route-map ROUTESERVER-IN rule 20 set local-preference '130'
+set policy route-map ROUTESERVER-IN rule 20 set metric '1000'
 
 delete policy route-map ROUTESERVER-OUT
 set policy route-map ROUTESERVER-OUT rule 1 action 'permit'
@@ -414,6 +418,7 @@ set policy route-map UPSTREAM-IN rule 10 on-match next
 set policy route-map UPSTREAM-IN rule 20 action 'permit'
 set policy route-map UPSTREAM-IN rule 20 set large-community add '%ASN%:0:200'
 set policy route-map UPSTREAM-IN rule 20 set local-preference '100'
+set policy route-map UPSTREAM-IN rule 20 set metric '1000'
 
 delete policy route-map UPSTREAM-OUT
 set policy route-map UPSTREAM-OUT rule 1 action 'permit'
