@@ -513,10 +513,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     for ibgp_neighbor in bgp_config["ibgp"]:
         if "manual" in ibgp_neighbor and ibgp_neighbor["manual"]:
             continue
-        this_asn_neighbor_list = [
-            n for n in bgp_config["ibgp"] if n["asn"] == ibgp_neighbor["asn"]
-        ]
-        nid = this_asn_neighbor_list.index(ibgp_neighbor)
+        nid = bgp_config["ibgp"].index(ibgp_neighbor)
         cmd += get_vyos_protocol_bgp_ibgp(ibgp_neighbor, nid)
     for upstream_neighbor in bgp_config["upstream"]:
         if "manual" in upstream_neighbor and upstream_neighbor["manual"]:
