@@ -159,3 +159,16 @@ router:
         downstream:
           - asn: 203023
             manual: true
+
+  - name: core.sea.atlas.projectk.org
+    protocols:
+      rpki:
+        - server: rtr.rpki.cloudflare.com
+          port: 8282
+          preference: 10
+      bgp:
+        ibgp: []
+        upstream: []
+        routeserver: []
+        peer: []
+        downstream: []
