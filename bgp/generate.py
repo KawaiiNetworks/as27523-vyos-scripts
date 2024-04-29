@@ -294,22 +294,56 @@ def get_vyos_protocol_rpki(server_list):
     return cmd
 
 
-def vyos_neighbor_optional_attributes(neighbor, route_map_name):
+def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
     """cmd to configure vyos neighbor optional attributes"""
 
     f = ""
     if "local-pref" in neighbor:
         f += f"""
-        set policy route-map {route_map_name} rule 200 set local-preference '{neighbor["local-pref"]}'
-        """
-    if "prepend" in neighbor:
-        f += f"""
-        set policy route-map {route_map_name} rule 200 set as-path prepend '{neighbor["prepend"]}'
+        set policy route-map {route_map_in_name} rule 200 set local-preference '{neighbor["local-pref"]}'
         """
     if "metric" in neighbor:
         f += f"""
-        set policy route-map {route_map_name} rule 200 set metric {neighbor["metric"]}
+        set policy route-map {route_map_in_name} rule 200 set metric {neighbor["metric"]}
         """
+
+    if "post-import-accept" in neighbor:
+        r = 201
+        for c in neighbor["post-import-accept"]:
+            f += f"""
+            set policy route-map {route_map_in_name} rule {r} action {c["action"]}
+            set policy route-map {route_map_in_name} rule {r} match {c["match"]}
+            """
+            if "set" in c:
+                f += f"""
+                set policy route-map {route_map_in_name} rule {r} set {c["set"]}
+                """
+            r += 1
+    return f
+
+
+def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
+    """cmd to configure vyos neighbor optional attributes"""
+
+    f = ""
+    if "prepend" in neighbor:
+        f += f"""
+        set policy route-map {route_map_out_name} rule 200 set as-path prepend '{neighbor["prepend"]}'
+        """
+
+    if "post-export-accept" in neighbor:
+        r = 201
+        for c in neighbor["post-export-accept"]:
+            f += f"""
+            set policy route-map {route_map_out_name} rule {r} action {c["action"]}
+            set policy route-map {route_map_out_name} rule {r} match {c["match"]}
+            """
+            if "set" in c:
+                f += f"""
+                set policy route-map {route_map_out_name} rule {r} set {c["set"]}
+                """
+            r += 1
+
     return f
 
 
@@ -318,17 +352,19 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
 
     asn = local_asn
     neighbor_address = neighbor["neighbor-address"]
-    route_map_name = f"IBGP-IN-{neighbor_id}"
+    route_map_in_name = f"IBGP-IN-{neighbor_id}"
 
     final_filter = f"""
-    delete policy route-map {route_map_name}
-    set policy route-map {route_map_name} rule 10 action permit
-    set policy route-map {route_map_name} rule 10 call IBGP-IN
-    set policy route-map {route_map_name} rule 10 on-match next
-    set policy route-map {route_map_name} rule 200 action permit
+    delete policy route-map {route_map_in_name}
+    set policy route-map {route_map_in_name} rule 10 action permit
+    set policy route-map {route_map_in_name} rule 10 call IBGP-IN
+    set policy route-map {route_map_in_name} rule 10 on-match next
+    set policy route-map {route_map_in_name} rule 200 action permit
+    set policy route-map {route_map_in_name} rule 200 on-match next
+    set policy route-map {route_map_in_name} rule 1000 action permit
     """
 
-    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
+    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -341,7 +377,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if ("simple-out" in neighbor and neighbor["simple-out"]) else "IBGP-OUT"}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
 
@@ -353,17 +389,29 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     asn = neighbor["asn"]
     neighbor_address = neighbor["neighbor-address"]
-    route_map_name = f"AS{asn}-UPSTREAM-IN-{neighbor_id}"
+    route_map_in_name = f"AS{asn}-UPSTREAM-IN-{neighbor_id}"
+    route_map_out_name = f"AS{asn}-UPSTREAM-OUT-{neighbor_id}"
 
     final_filter = f"""
-    delete policy route-map {route_map_name}
-    set policy route-map {route_map_name} rule 10 action permit
-    set policy route-map {route_map_name} rule 10 call UPSTREAM-IN
-    set policy route-map {route_map_name} rule 10 on-match next
-    set policy route-map {route_map_name} rule 200 action permit
+    delete policy route-map {route_map_in_name}
+    set policy route-map {route_map_in_name} rule 10 action permit
+    set policy route-map {route_map_in_name} rule 10 call UPSTREAM-IN
+    set policy route-map {route_map_in_name} rule 10 on-match next
+    set policy route-map {route_map_in_name} rule 200 action permit
+    set policy route-map {route_map_in_name} rule 200 on-match next
+    set policy route-map {route_map_in_name} rule 1000 action permit
+
+    delete policy route-map {route_map_out_name}
+    set policy route-map {route_map_out_name} rule 10 action permit
+    set policy route-map {route_map_out_name} rule 10 call UPSTREAM-OUT
+    set policy route-map {route_map_out_name} rule 10 on-match next
+    set policy route-map {route_map_out_name} rule 200 action permit
+    set policy route-map {route_map_out_name} rule 200 on-match next
+    set policy route-map {route_map_out_name} rule 1000 action permit
     """
 
-    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
+    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
+    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -375,8 +423,8 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export UPSTREAM-OUT
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
 
@@ -388,17 +436,29 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
 
     asn = neighbor["asn"]
     neighbor_address = neighbor["neighbor-address"]
-    route_map_name = f"AS{asn}-ROUTESERVER-IN-{neighbor_id}"
+    route_map_in_name = f"AS{asn}-ROUTESERVER-IN-{neighbor_id}"
+    route_map_out_name = f"AS{asn}-ROUTESERVER-OUT-{neighbor_id}"
 
     final_filter = f"""
-    delete policy route-map {route_map_name}
-    set policy route-map {route_map_name} rule 10 action permit
-    set policy route-map {route_map_name} rule 10 call ROUTESERVER-IN
-    set policy route-map {route_map_name} rule 10 on-match next
-    set policy route-map {route_map_name} rule 200 action permit
+    delete policy route-map {route_map_in_name}
+    set policy route-map {route_map_in_name} rule 10 action permit
+    set policy route-map {route_map_in_name} rule 10 call ROUTESERVER-IN
+    set policy route-map {route_map_in_name} rule 10 on-match next
+    set policy route-map {route_map_in_name} rule 200 action permit
+    set policy route-map {route_map_in_name} rule 200 on-match next
+    set policy route-map {route_map_in_name} rule 1000 action permit
+
+    delete policy route-map {route_map_out_name}
+    set policy route-map {route_map_out_name} rule 10 action permit
+    set policy route-map {route_map_out_name} rule 10 call ROUTESERVER-OUT
+    set policy route-map {route_map_out_name} rule 10 on-match next
+    set policy route-map {route_map_out_name} rule 200 action permit
+    set policy route-map {route_map_out_name} rule 200 on-match next
+    set policy route-map {route_map_out_name} rule 1000 action permit
     """
 
-    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
+    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
+    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -410,8 +470,8 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export ROUTESERVER-OUT
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
 
@@ -423,20 +483,32 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
 
     asn = neighbor["asn"]
     neighbor_address = neighbor["neighbor-address"]
-    route_map_name = f"AS{asn}-PEER-IN-{neighbor_id}"
+    route_map_in_name = f"AS{asn}-PEER-IN-{neighbor_id}"
+    route_map_out_name = f"AS{asn}-PEER-OUT-{neighbor_id}"
 
     final_filter = f"""
-    delete policy route-map {route_map_name}
-    set policy route-map {route_map_name} rule 10 action permit
-    set policy route-map {route_map_name} rule 10 call PEER-IN
-    set policy route-map {route_map_name} rule 10 on-match next
-    set policy route-map {route_map_name} rule 20 action permit
-    set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
-    set policy route-map {route_map_name} rule 20 on-match next
-    set policy route-map {route_map_name} rule 200 action permit
+    delete policy route-map {route_map_in_name}
+    set policy route-map {route_map_in_name} rule 10 action permit
+    set policy route-map {route_map_in_name} rule 10 call PEER-IN
+    set policy route-map {route_map_in_name} rule 10 on-match next
+    set policy route-map {route_map_in_name} rule 20 action permit
+    set policy route-map {route_map_in_name} rule 20 call FILTER-AS{asn}-IN
+    set policy route-map {route_map_in_name} rule 20 on-match next
+    set policy route-map {route_map_in_name} rule 200 action permit
+    set policy route-map {route_map_in_name} rule 200 on-match next
+    set policy route-map {route_map_in_name} rule 1000 action permit
+
+    delete policy route-map {route_map_out_name}
+    set policy route-map {route_map_out_name} rule 10 action permit
+    set policy route-map {route_map_out_name} rule 10 call PEER-OUT
+    set policy route-map {route_map_out_name} rule 10 on-match next
+    set policy route-map {route_map_out_name} rule 200 action permit
+    set policy route-map {route_map_out_name} rule 200 on-match next
+    set policy route-map {route_map_out_name} rule 1000 action permit
     """
 
-    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
+    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
+    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -448,8 +520,8 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export PEER-OUT
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
 
@@ -461,20 +533,32 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
 
     asn = neighbor["asn"]
     neighbor_address = neighbor["neighbor-address"]
-    route_map_name = f"AS{asn}-DOWNSTREAM-IN-{neighbor_id}"
+    route_map_in_name = f"AS{asn}-DOWNSTREAM-IN-{neighbor_id}"
+    route_map_out_name = f"AS{asn}-DOWNSTREAM-OUT-{neighbor_id}"
 
     final_filter = f"""
-    delete policy route-map {route_map_name}
-    set policy route-map {route_map_name} rule 10 action permit
-    set policy route-map {route_map_name} rule 10 call DOWNSTREAM-IN
-    set policy route-map {route_map_name} rule 10 on-match next
-    set policy route-map {route_map_name} rule 20 action permit
-    set policy route-map {route_map_name} rule 20 call FILTER-AS{asn}-IN
-    set policy route-map {route_map_name} rule 20 on-match next
-    set policy route-map {route_map_name} rule 200 action permit
+    delete policy route-map {route_map_in_name}
+    set policy route-map {route_map_in_name} rule 10 action permit
+    set policy route-map {route_map_in_name} rule 10 call DOWNSTREAM-IN
+    set policy route-map {route_map_in_name} rule 10 on-match next
+    set policy route-map {route_map_in_name} rule 20 action permit
+    set policy route-map {route_map_in_name} rule 20 call FILTER-AS{asn}-IN
+    set policy route-map {route_map_in_name} rule 20 on-match next
+    set policy route-map {route_map_in_name} rule 200 action permit
+    set policy route-map {route_map_in_name} rule 200 on-match next
+    set policy route-map {route_map_in_name} rule 1000 action permit
+
+    delete policy route-map {route_map_out_name}
+    set policy route-map {route_map_out_name} rule 10 action permit
+    set policy route-map {route_map_out_name} rule 10 call DOWNSTREAM-OUT
+    set policy route-map {route_map_out_name} rule 10 on-match next
+    set policy route-map {route_map_out_name} rule 200 action permit
+    set policy route-map {route_map_out_name} rule 200 on-match next
+    set policy route-map {route_map_out_name} rule 1000 action permit
     """
 
-    final_filter += vyos_neighbor_optional_attributes(neighbor, route_map_name)
+    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
+    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -486,8 +570,8 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export DOWNSTREAM-OUT
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """
 
