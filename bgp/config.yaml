@@ -35,7 +35,7 @@ router:
             # example
             # prepend: "27523 27523 27523"
             post-import-accept:
-              - action: accept
+              - action: permit
                 match: ipv6 address prefix-list CERNET-0
                 set: "local-preference '500'"
             description: HE KCIX Upstream
