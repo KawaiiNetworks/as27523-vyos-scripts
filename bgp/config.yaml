@@ -7,6 +7,11 @@ as-set:
 
 router:
   - name: core.mci.atlas.projectk.org
+    custom-config: |
+      delete policy prefix-list6 CERNET-0
+      set policy prefix-list6 CERNET-0 rule 10 action permit
+      set policy prefix-list6 CERNET-0 rule 10 prefix 240c:c000::/20
+      set policy prefix-list6 CERNET-0 rule 10 le 128
     protocols:
       rpki:
         - server: 192.168.32.2
@@ -29,10 +34,10 @@ router:
           - asn: 6939
             # example
             # prepend: "27523 27523 27523"
-            # post-import-accept:
-            #   - action: accept/deny
-            #     match:
-            #     set:
+            post-import-accept:
+              - action: accept
+                match: ipv6 address prefix-list CERNET-0
+                set: local-preference 500
             description: HE KCIX Upstream
             neighbor-address: 2001:504:1b:1::5
             update-source: eth2

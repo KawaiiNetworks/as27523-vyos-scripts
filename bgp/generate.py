@@ -699,7 +699,17 @@ def get_final_vyos_cmd(router_config):
         [line.strip() for line in configure.splitlines() if line.strip()]
     )
 
-    configure = "\nconfigure\n" + commonpolicy + configure + "\ncommit\nexit\n"
+    configure = (
+        "\nconfigure\n"
+        + commonpolicy
+        + (
+            router_config["custom-config"] + "\n"
+            if "custom-config" in router_config
+            else ""
+        )
+        + configure
+        + "\ncommit\nexit\n"
+    )
 
     #################################
 
