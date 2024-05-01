@@ -34,10 +34,10 @@ router:
           - asn: 6939
             # example
             # prepend: "27523 27523 27523"
-            post-import-accept:
-              - action: permit
-                match: ipv6 address prefix-list CERNET-0
-                set: "local-preference '500'"
+            # post-import-accept:
+            #   - action: permit
+            #     match: ipv6 address prefix-list CERNET-0
+            #     set: "local-preference '500'"
             description: HE KCIX Upstream
             neighbor-address: 2001:504:1b:1::5
             update-source: eth2

@@ -7,6 +7,7 @@ import yaml
 import time
 import dns.resolver
 from copy import deepcopy
+from aggregate_prefixes import aggregate_prefixes
 
 
 work_dir = os.path.dirname(os.path.abspath(__file__))
@@ -101,13 +102,13 @@ def get_as_set_member(asn):
     return deepcopy(res)
 
 
-def get_prefix_matrix(ipversion, asn):
+def get_prefix_matrix(ipversion, asn, aggregate=False):
     """use bgpq4 to get prefix matrix"""
 
     if (ipversion, asn) in prefix_matrix_map:
         return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
-    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A,%m,%i\n" as{asn} -l AS{asn}'
+    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" as{asn} -l AS{asn}'
     prefix_matrix = []
     try:
         result = subprocess.run(
@@ -122,6 +123,21 @@ def get_prefix_matrix(ipversion, asn):
         res = [x for x in res if x]
         for line in res:
             prefix_matrix.append(tuple(line.split(",")))
+
+        if aggregate:
+            prefix_matrix = list(
+                aggregate_prefixes([f"{p[0]}/{p[1]}" for p in prefix_matrix])
+            )
+            prefix_matrix = [
+                (
+                    x.network_address.exploded,
+                    x.prefixlen,
+                    x.prefixlen,
+                    24 if ipversion == 4 else 48,
+                )
+                for x in prefix_matrix
+            ]
+
     except Exception as e:
         raise e
     prefix_matrix_map[(ipversion, asn)] = prefix_matrix
@@ -174,10 +190,14 @@ def get_vyos_as_path(asn):
     return full_vyos_cmd
 
 
-def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=False):
+def get_vyos_prefix_list(
+    ipversion, asn, max_length=None, filter_name=None, cone=False, aggregate=False
+):
     """use bgpq4 to get prefix list filter"""
 
-    def vyos_cmd(network, length, ge, le, object_mask, invert_mask, rule):
+    # if aggregate is True it can reduce the number of configuration lines
+
+    def vyos_cmd(network, length, ge, le, rule):
         # r = str(rule)
         return f"""
         set policy {pl} {fn} rule {rule} action permit
@@ -233,14 +253,14 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
 
         prefix_matrix = []
         for x in cone_asn_list:
-            prefix_matrix.extend(get_prefix_matrix(ipversion, x))
+            prefix_matrix.extend(get_prefix_matrix(ipversion, x, aggregate=aggregate))
         if len(prefix_matrix) > config["as-set"]["prefix-limit"]:
             full_vyos_cmd += vyos_cmd_when_limit_violation(
                 pl, fn, len(cone_asn_list), len(prefix_matrix)
             )
             return full_vyos_cmd
     else:
-        prefix_matrix = get_prefix_matrix(ipversion, asn)
+        prefix_matrix = get_prefix_matrix(ipversion, asn, aggregate=aggregate)
 
     prefix_matrix = sorted(list(set(prefix_matrix)))
     if len(prefix_matrix) > 0:
