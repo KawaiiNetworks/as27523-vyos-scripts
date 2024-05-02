@@ -55,14 +55,18 @@ def get_asset_name(asn):
 
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
 
-    response = requests.get(url, timeout=10)
-    res = response.json()["data"][0]["irr_as_set"].split()
-    new_res = []
-    for n in res:
-        if "::" in n:
-            new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
-        else:
-            new_res.append(n)
+    try:
+        response = requests.get(url, timeout=10)
+        res = response.json()["data"][0]["irr_as_set"].split()
+        new_res = []
+        for n in res:
+            if "::" in n:
+                new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
+            else:
+                new_res.append(n)
+    except Exception as e:
+        print(f"get as-set name for AS{asn} failed: {e}")
+        new_res = [asn]
 
     asset_name_map[asn] = new_res
     print(f"AS{asn} as-set name: {new_res}")
