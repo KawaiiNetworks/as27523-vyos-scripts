@@ -66,7 +66,7 @@ def get_asset_name(asn):
                 new_res.append(n)
     except Exception as e:
         print(f"get as-set name for AS{asn} failed: {e}")
-        new_res = [asn]
+        new_res = [f"AS{asn}"]
 
     asset_name_map[asn] = new_res
     print(f"AS{asn} as-set name: {new_res}")
