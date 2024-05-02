@@ -173,8 +173,18 @@ router:
             neighbor-address: 2001:504:16::c188
             update-source: eth3.2
         downstream:
-          - asn: 203023
-            manual: true
+          - asn: 142551
+            neighbor-address: fe80::14:2551:1
+            update-source: eth6
+          - asn: 199310
+            neighbor-address: fe80::19:9310:1
+            update-source: eth6
+          - asn: 215575
+            neighbor-address: fe80::21:5575:1
+            update-source: eth6
+          - asn: 401009
+            neighbor-address: fe80::40:1009:1
+            update-source: eth6
 
   - name: core.sea.atlas.projectk.org
     protocols:
