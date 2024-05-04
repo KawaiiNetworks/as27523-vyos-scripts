@@ -105,6 +105,7 @@ router:
           - asn: 210979
             description: Pigeon IX MCI RS
             neighbor-address: 2602:f9f6:7e0:5::1
+            local-pref: 125
             update-source: br5
         peer:
           - asn: 6456
