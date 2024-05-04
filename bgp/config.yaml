@@ -179,6 +179,9 @@ router:
           - asn: 199310
             neighbor-address: fe80::19:9310:1
             update-source: eth6
+          - asn: 203023
+            neighbor-address: fe80::20:3023:1
+            update-source: eth6
           - asn: 215575
             neighbor-address: fe80::21:5575:1
             update-source: eth6

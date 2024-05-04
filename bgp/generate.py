@@ -61,6 +61,7 @@ def get_asset_name(asn):
         new_res = []
         for n in res:
             if "::" in n:
+                # 虽然这里有一个-S且别的命令那也有-S，但是这边-S在后面，会覆盖掉那些更多的数据库，使得最终只用指定的数据库
                 new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
             else:
                 new_res.append(n)
