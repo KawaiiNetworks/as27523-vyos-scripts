@@ -174,19 +174,19 @@ router:
             update-source: eth3.2
         downstream:
           - asn: 142551
-            neighbor-address: fe80::14:2551:1
+            neighbor-address: 2602:f93b:ffff:131::14:2551:1
             update-source: eth6
           - asn: 199310
-            neighbor-address: fe80::19:9310:1
+            neighbor-address: 2602:f93b:ffff:131::19:9310:1
             update-source: eth6
           - asn: 203023
-            neighbor-address: fe80::20:3023:1
+            neighbor-address: 2602:f93b:ffff:131::20:3023:1
             update-source: eth6
           - asn: 215575
-            neighbor-address: fe80::21:5575:1
+            neighbor-address: 2602:f93b:ffff:131::21:5575:1
             update-source: eth6
           - asn: 401009
-            neighbor-address: fe80::40:1009:1
+            neighbor-address: 2602:f93b:ffff:131::40:1009:1
             update-source: eth6
 
   - name: core.sea.atlas.projectk.org
