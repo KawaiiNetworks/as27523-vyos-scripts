@@ -30,6 +30,7 @@ router:
             update-source: eth2
           - asn: 945
             neighbor-address: 2001:504:1b:1::160
+            metric: "+5"
             update-source: eth2
           - asn: 6939
             # example
