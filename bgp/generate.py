@@ -393,11 +393,14 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    password = neighbor["password"] if "password" in neighbor else None
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-ibgp"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
@@ -440,11 +443,14 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    password = neighbor["password"] if "password" in neighbor else None
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Upstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
@@ -487,11 +493,14 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    password = neighbor["password"] if "password" in neighbor else None
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-RS"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
@@ -537,11 +546,14 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    password = neighbor["password"] if "password" in neighbor else None
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Peer"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
@@ -587,11 +599,14 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    password = neighbor["password"] if "password" in neighbor else None
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Downstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
+    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force

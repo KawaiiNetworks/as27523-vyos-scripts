@@ -156,6 +156,26 @@ router:
             neighbor-address: 2001:504:16::314:0:3417
             metric: "+5"
             update-source: eth3.2
+          - asn: 15169
+            description: Google SIX
+            neighbor-address: 206.81.80.17
+            password: jutran7dEbUwr6c9
+            update-source: eth3.2
+          - asn: 15169
+            description: Google SIX
+            neighbor-address: 2001:504:16::3b41
+            password: jutran7dEbUwr6c9
+            update-source: eth3.2
+          - asn: 15169
+            description: Google SIX
+            neighbor-address: 206.81.80.69
+            password: jutran7dEbUwr6c9
+            update-source: eth3.2
+          - asn: 15169
+            description: Google SIX
+            neighbor-address: 2001:504:16::69:0:3b41
+            password: jutran7dEbUwr6c9
+            update-source: eth3.2
           - asn: 25668
             neighbor-address: 206.81.80.103
             update-source: eth3.2
