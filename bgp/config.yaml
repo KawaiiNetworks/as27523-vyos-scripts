@@ -159,11 +159,13 @@ router:
           - asn: 15169
             description: Google SIX
             neighbor-address: 206.81.80.17
+            metric: "+5"
             password: jutran7dEbUwr6c9
             update-source: eth3.2
           - asn: 15169
             description: Google SIX
             neighbor-address: 2001:504:16::3b41
+            metric: "+5"
             password: jutran7dEbUwr6c9
             update-source: eth3.2
           - asn: 15169
