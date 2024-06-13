@@ -340,11 +340,14 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
             f += f"""
             set policy route-map {route_map_in_name} rule {r} action {c["action"]}
             set policy route-map {route_map_in_name} rule {r} match {c["match"]}
-            set policy route-map {route_map_in_name} rule {r} on-match next
             """
             if "set" in c:
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} set {c["set"]}
+                """
+            if c["action"] == "permit":
+                f += f"""
+                set policy route-map {route_map_in_name} rule {r} on-match next
                 """
             r += 1
     return f
@@ -365,11 +368,14 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
             f += f"""
             set policy route-map {route_map_out_name} rule {r} action {c["action"]}
             set policy route-map {route_map_out_name} rule {r} match {c["match"]}
-            set policy route-map {route_map_out_name} rule {r} on-match next
             """
             if "set" in c:
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} set {c["set"]}
+                """
+            if c["action"] == "permit":
+                f += f"""
+                set policy route-map {route_map_out_name} rule {r} on-match next
                 """
             r += 1
 
