@@ -1,0 +1,9 @@
+delete policy route-map SIMPLE-IBGP-OUT
+set policy route-map SIMPLE-IBGP-OUT rule 10 action 'permit'
+set policy route-map SIMPLE-IBGP-OUT rule 10 match ip address prefix-list 'LOCAL-ALLOWED-PREFIX4'
+set policy route-map SIMPLE-IBGP-OUT rule 20 action 'permit'
+set policy route-map SIMPLE-IBGP-OUT rule 20 match ipv6 address prefix-list 'LOCAL-ALLOWED-PREFIX6'
+set policy route-map SIMPLE-IBGP-OUT rule 30 action 'permit'
+set policy route-map SIMPLE-IBGP-OUT rule 30 match ip address prefix-list 'LOCAL-ASN-PREFIX4-le32'
+set policy route-map SIMPLE-IBGP-OUT rule 40 action 'permit'
+set policy route-map SIMPLE-IBGP-OUT rule 40 match ipv6 address prefix-list 'LOCAL-ASN-PREFIX6-le128'

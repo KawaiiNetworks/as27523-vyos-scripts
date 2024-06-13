@@ -1,0 +1,5 @@
+delete policy route-map FILTER-ALLOW-LOCAL-ASN-PREFIX
+set policy route-map FILTER-ALLOW-LOCAL-ASN-PREFIX rule 10 action 'permit'
+set policy route-map FILTER-ALLOW-LOCAL-ASN-PREFIX rule 10 match ip address prefix-list 'LOCAL-ASN-PREFIX4'
+set policy route-map FILTER-ALLOW-LOCAL-ASN-PREFIX rule 20 action 'permit'
+set policy route-map FILTER-ALLOW-LOCAL-ASN-PREFIX rule 20 match ipv6 address prefix-list 'LOCAL-ASN-PREFIX6'

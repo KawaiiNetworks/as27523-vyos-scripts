@@ -1,0 +1,8 @@
+delete policy route-map DOWNSTREAM-IN
+set policy route-map DOWNSTREAM-IN rule 10 action 'permit'
+set policy route-map DOWNSTREAM-IN rule 10 call 'FILTER-EBGP'
+set policy route-map DOWNSTREAM-IN rule 10 on-match next
+set policy route-map DOWNSTREAM-IN rule 20 action 'permit'
+set policy route-map DOWNSTREAM-IN rule 20 set large-community add '%ASN%:0:500'
+set policy route-map DOWNSTREAM-IN rule 20 set local-preference '200'
+set policy route-map DOWNSTREAM-IN rule 20 set metric '1000'

@@ -17,11 +17,13 @@ config = yaml.safe_load(
 
 local_asn = config["local-asn"]
 router_list = config["router"]
-commonpolicy = (
-    open(os.path.join(work_dir, "commonpolicy.sh"), "r", encoding="utf-8")
-    .read()
-    .replace("%ASN%", str(local_asn))
-)
+
+defaultconfig = ""
+for root, dirs, files in os.walk(os.path.join(work_dir, "defaults")):
+    for file in files:
+        defaultconfig += open(os.path.join(root, file), "r", encoding="utf-8").read()
+        defaultconfig += "\n"
+defaultconfig = defaultconfig.replace("%ASN%", str(local_asn))
 
 asset_name_map = {}
 """as:as-set"""
@@ -741,7 +743,7 @@ def get_final_vyos_cmd(router_config):
 
     configure = (
         "\nconfigure\n"
-        + commonpolicy
+        + defaultconfig
         + (
             router_config["custom-config"] + "\n"
             if "custom-config" in router_config

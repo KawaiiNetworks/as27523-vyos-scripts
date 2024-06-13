@@ -24,6 +24,11 @@ router:
             simple-out: true
             local-pref: 180
             update-source: tun10
+          - description: BGP Tunnel to TYO
+            neighbor-address: 169.254.20.5
+            simple-out: true
+            local-pref: 180
+            update-source: tun20
         upstream:
           - asn: 945
             neighbor-address: 206.51.7.160
@@ -227,6 +232,22 @@ router:
         upstream:
           - asn: 50131
             manual: true
+        routeserver: []
+        peer: []
+        downstream: []
+
+  - name: core.tyo.atlas.projectk.org
+    protocols:
+      rpki:
+        - server: rtr.rpki.cloudflare.com
+          port: 8282
+          preference: 10
+      bgp:
+        ibgp:
+          - description: BGP Tunnel to MCI
+            neighbor-address: 169.254.20.6
+            update-source: tun20
+        upstream: []
         routeserver: []
         peer: []
         downstream: []

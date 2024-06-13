@@ -1,0 +1,6 @@
+delete policy prefix-list6 IPv6-Range-0to15
+set policy prefix-list6 IPv6-Range-0to15 rule 10 action 'permit'
+set policy prefix-list6 IPv6-Range-0to15 rule 10 description 'Match IPv6 block bigger than /16'
+set policy prefix-list6 IPv6-Range-0to15 rule 10 ge '0'
+set policy prefix-list6 IPv6-Range-0to15 rule 10 le '15'
+set policy prefix-list6 IPv6-Range-0to15 rule 10 prefix '::/0'

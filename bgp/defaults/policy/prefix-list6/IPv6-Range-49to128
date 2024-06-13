@@ -1,0 +1,6 @@
+delete policy prefix-list6 IPv6-Range-49to128
+set policy prefix-list6 IPv6-Range-49to128 rule 10 action 'permit'
+set policy prefix-list6 IPv6-Range-49to128 rule 10 description 'Match IPv6 block smaller than /48'
+set policy prefix-list6 IPv6-Range-49to128 rule 10 ge '49'
+set policy prefix-list6 IPv6-Range-49to128 rule 10 le '128'
+set policy prefix-list6 IPv6-Range-49to128 rule 10 prefix '::/0'

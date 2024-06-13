@@ -1,0 +1,3 @@
+delete policy large-community-list FROM-IBGP
+set policy large-community-list FROM-IBGP rule 10 action 'permit'
+set policy large-community-list FROM-IBGP rule 10 regex '%ASN%:0:100'

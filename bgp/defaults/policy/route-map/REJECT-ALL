@@ -1,0 +1,2 @@
+delete policy route-map REJECT-ALL
+set policy route-map REJECT-ALL rule 10 action 'deny'

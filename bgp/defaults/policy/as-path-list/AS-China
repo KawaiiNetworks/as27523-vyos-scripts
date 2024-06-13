@@ -1,0 +1,9 @@
+delete policy as-path-list AS-China
+set policy as-path-list AS-China rule 10 action 'permit'
+set policy as-path-list AS-China rule 10 regex '^([0-9]+_)*(4837|9929)(_[0-9]+)*$'
+set policy as-path-list AS-China rule 20 action 'permit'
+set policy as-path-list AS-China rule 20 regex '^([0-9]+_)*(4134|4809)(_[0-9]+)*$'
+set policy as-path-list AS-China rule 30 action 'permit'
+set policy as-path-list AS-China rule 30 regex '^([0-9]+_)*(58453|9808)(_[0-9]+)*$'
+set policy as-path-list AS-China rule 40 action 'permit'
+set policy as-path-list AS-China rule 40 regex '^([0-9]+_)*(23910|23911|4538)(_[0-9]+)*$'
