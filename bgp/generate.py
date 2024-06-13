@@ -340,6 +340,7 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
             f += f"""
             set policy route-map {route_map_in_name} rule {r} action {c["action"]}
             set policy route-map {route_map_in_name} rule {r} match {c["match"]}
+            set policy route-map {route_map_in_name} rule {r} on-match next
             """
             if "set" in c:
                 f += f"""
@@ -364,6 +365,7 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
             f += f"""
             set policy route-map {route_map_out_name} rule {r} action {c["action"]}
             set policy route-map {route_map_out_name} rule {r} match {c["match"]}
+            set policy route-map {route_map_out_name} rule {r} on-match next
             """
             if "set" in c:
                 f += f"""
@@ -380,6 +382,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     asn = local_asn
     neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"IBGP-IN-{neighbor_id}"
+    route_map_out_name = f"IBGP-OUT-{neighbor_id}"
 
     final_filter = f"""
     delete policy route-map {route_map_in_name}
@@ -389,9 +392,18 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     set policy route-map {route_map_in_name} rule 200 action permit
     set policy route-map {route_map_in_name} rule 200 on-match next
     set policy route-map {route_map_in_name} rule 1000 action permit
+    
+    delete policy route-map {route_map_out_name}
+    set policy route-map {route_map_out_name} rule 10 action permit
+    set policy route-map {route_map_out_name} rule 10 call IBGP-OUT
+    set policy route-map {route_map_out_name} rule 10 on-match next
+    set policy route-map {route_map_out_name} rule 200 action permit
+    set policy route-map {route_map_out_name} rule 200 on-match next
+    set policy route-map {route_map_out_name} rule 1000 action permit
     """
 
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
+    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
@@ -406,7 +418,7 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if ("simple-out" in neighbor and neighbor["simple-out"]) else "IBGP-OUT"}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if ("simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound
     """

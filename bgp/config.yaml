@@ -247,6 +247,9 @@ router:
           - description: BGP Tunnel to MCI
             neighbor-address: 169.254.20.6
             update-source: tun20
+            post-export-accept:
+              - action: deny
+                match: as-path AS-Except-China
         upstream: []
         routeserver: []
         peer: []
