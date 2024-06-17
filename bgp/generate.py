@@ -465,12 +465,20 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     password = neighbor["password"] if "password" in neighbor else None
 
+    if "multihop" in neighbor and neighbor["multihop"].lower() != "false":
+        multihop = (
+            255 if neighbor["multihop"].lower() == "true" else int(neighbor["multihop"])
+        )
+    else:
+        multihop = False
+
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Upstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
     {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
+    {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
