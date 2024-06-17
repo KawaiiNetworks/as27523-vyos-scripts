@@ -255,10 +255,16 @@ router:
             neighbor-address: 10.1.52.253
             update-source: 103.27.185.43
             multihop: 2
+            post-import-accept:
+              - action: deny
+                match: as-path AS-Except-China
           - asn: 134835
             neighbor-address: 2403:ad80:8f:ffff::253
             update-source: 2403:ad80:88:44fd::9c38
             multihop: 2
+            post-import-accept:
+              - action: deny
+                match: as-path AS-Except-China
         routeserver: []
         peer: []
         downstream: []
