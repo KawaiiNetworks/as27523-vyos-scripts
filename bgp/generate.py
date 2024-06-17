@@ -465,10 +465,11 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     password = neighbor["password"] if "password" in neighbor else None
 
-    if "multihop" in neighbor and neighbor["multihop"].lower() != "false":
-        multihop = (
-            255 if neighbor["multihop"].lower() == "true" else int(neighbor["multihop"])
-        )
+    if "multihop" in neighbor:
+        if isinstance(neighbor["multihop"], int):
+            multihop = neighbor["multihop"]
+        else:  # str
+            multihop = neighbor["multihop"].lower() == "true"
     else:
         multihop = False
 
