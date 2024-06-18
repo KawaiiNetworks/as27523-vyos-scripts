@@ -29,6 +29,11 @@ router:
             simple-out: true
             local-pref: 180
             update-source: tun20
+          - description: BGP Tunnel to TYO
+            neighbor-address: 2602:f93b:ffff:ffff:5:1:0:1
+            simple-out: true
+            local-pref: 180
+            update-source: tun20
         upstream:
           - asn: 945
             neighbor-address: 206.51.7.160
@@ -268,6 +273,10 @@ router:
             post-export-accept:
               - action: deny
                 match: as-path AS-Except-China
+          - description: BGP Tunnel to MCI
+            neighbor-address: 2602:f93b:ffff:ffff:3:1:0:1
+            update-source: tun20
+            simple-out: true
         upstream:
           - asn: 134835
             neighbor-address: 10.1.52.253
