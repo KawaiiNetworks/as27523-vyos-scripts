@@ -114,6 +114,22 @@ router:
             local-pref: 125
             update-source: br5
         peer:
+          - asn: 1828
+            description: Unitas Global KCIX
+            neighbor-address: 206.51.7.54
+            update-source: eth2
+          - asn: 1828
+            description: Unitas Global KCIX
+            neighbor-address: 2001:504:1b:1::54
+            update-source: eth2
+          - asn: 1828
+            description: Unitas Global SIX
+            neighbor-address: 206.81.80.36
+            update-source: eth3.2
+          - asn: 1828
+            description: Unitas Global SIX
+            neighbor-address: 2001:504:16::724
+            update-source: eth3.2
           - asn: 6456
             neighbor-address: 206.81.80.10
             update-source: eth3.2
