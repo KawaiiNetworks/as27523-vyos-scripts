@@ -125,10 +125,12 @@ router:
           - asn: 1828
             description: Unitas Global SIX
             neighbor-address: 206.81.80.36
+            metric: "+5"
             update-source: eth3.2
           - asn: 1828
             description: Unitas Global SIX
             neighbor-address: 2001:504:16::724
+            metric: "+5"
             update-source: eth3.2
           - asn: 6456
             neighbor-address: 206.81.80.10
