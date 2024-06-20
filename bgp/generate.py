@@ -708,6 +708,32 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     return cmd
 
 
+def get_vyos_set_src(router_config):
+    cmd = """
+    delete policy route-map SET-SRC
+    set policy route-map SET-SRC rule 10 action 'permit'
+    set policy route-map SET-SRC rule 10 match ip address prefix-list 'IPv4-ALL'
+    set policy route-map SET-SRC rule 20 action 'permit'
+    set policy route-map SET-SRC rule 20 match ipv6 address prefix-list 'IPv6-ALL'
+    """
+
+    if "src" in router_config:
+        if "ipv4" in router_config["src"]:
+            cmd += f"""
+            set policy route-map SET-SRC rule 10 set src '{router_config["src"]["ipv4"]}'
+            delete system ip protocol bgp
+            set system ip protocol bgp route-map SET-SRC
+            """
+        if "ipv6" in router_config["src"]:
+            cmd += f"""
+            set policy route-map SET-SRC rule 20 set src '{router_config["src"]["ipv6"]}'
+            delete system ipv6 protocol bgp
+            set system ipv6 protocol bgp route-map SET-SRC
+            """
+
+    return cmd
+
+
 def get_final_vyos_cmd(router_config):
     """cmd to configure vyos"""
 
@@ -763,6 +789,10 @@ def get_final_vyos_cmd(router_config):
 
     # protocol bgp
     configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
+
+    # set route src
+    if "src" in router_config:
+        configure += get_vyos_set_src(router_config)
 
     configure = "\n".join(
         [line.strip() for line in configure.splitlines() if line.strip()]

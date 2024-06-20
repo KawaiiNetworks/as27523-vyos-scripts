@@ -7,6 +7,9 @@ as-set:
 
 router:
   - name: core.mci.atlas.projectk.org
+    src:
+      ipv4: 23.175.184.1
+      ipv6: 2602:f93b:131::1
     custom-config: |
       delete policy prefix-list6 CERNET-0
       set policy prefix-list6 CERNET-0 rule 10 action permit
@@ -267,6 +270,9 @@ router:
         downstream: []
 
   - name: core.tyo.atlas.projectk.org
+    src:
+      ipv4: 103.27.185.43
+      ipv6: 2602:f93b:151::1
     custom-config: |
       delete policy prefix-list6 Tunnel-Endpoints
       set policy prefix-list6 Tunnel-Endpoints rule 10 action permit
