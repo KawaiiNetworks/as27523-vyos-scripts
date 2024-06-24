@@ -19,6 +19,9 @@ router:
       set policy prefix-list6 Tunnel-Endpoints rule 10 action permit
       set policy prefix-list6 Tunnel-Endpoints rule 10 prefix 2403:ad80:88:44fd::9c38/128
       set policy prefix-list6 Tunnel-Endpoints rule 10 le 128
+      delete policy as-path-list AS7018
+      set policy as-path-list AS7018 rule 10 action permit
+      set policy as-path-list AS7018 rule 10 regex _7018_
     protocols:
       rpki:
         - server: 192.168.32.2
@@ -48,6 +51,9 @@ router:
           - asn: 945
             neighbor-address: 206.51.7.160
             update-source: eth2
+            post-import-accept:
+              - action: deny
+                match: as-path AS7018
           - asn: 945
             neighbor-address: 2001:504:1b:1::160
             local-pref: 99
