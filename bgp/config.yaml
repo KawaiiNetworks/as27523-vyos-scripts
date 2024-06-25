@@ -250,6 +250,11 @@ router:
           - asn: 203023
             neighbor-address: 2602:f93b:ffff:131::20:3023:1
             update-source: eth6
+          - asn: 212232
+            description: BGP Tools
+            neighbor-address: 185.230.223.56
+            update-source: 23.175.184.1
+            multihop: 255
           - asn: 215575
             neighbor-address: 2602:f93b:ffff:131::21:5575:1
             update-source: eth6
