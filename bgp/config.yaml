@@ -22,6 +22,9 @@ router:
       delete policy as-path-list AS7018
       set policy as-path-list AS7018 rule 10 action permit
       set policy as-path-list AS7018 rule 10 regex _7018_
+      delete policy as-path-list AS1299
+      set policy as-path-list AS1299 rule 10 action permit
+      set policy as-path-list AS1299 rule 10 regex _1299_
     protocols:
       rpki:
         - server: 192.168.32.2
@@ -54,6 +57,8 @@ router:
             post-import-accept:
               - action: deny
                 match: as-path AS7018
+              - action: deny
+                match: as-path AS1299
           - asn: 945
             neighbor-address: 2001:504:1b:1::160
             local-pref: 99
