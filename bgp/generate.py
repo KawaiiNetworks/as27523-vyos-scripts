@@ -345,7 +345,8 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} set {c["set"]}
                 """
-            if c["action"] == "permit":
+            # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
+            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"].lower() == "true"):
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} on-match next
                 """
@@ -373,7 +374,8 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} set {c["set"]}
                 """
-            if c["action"] == "permit":
+            # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
+            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"].lower() == "true"):
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} on-match next
                 """

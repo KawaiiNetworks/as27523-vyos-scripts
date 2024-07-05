@@ -294,6 +294,22 @@ router:
       set policy prefix-list6 Tunnel-Endpoints rule 10 action permit
       set policy prefix-list6 Tunnel-Endpoints rule 10 prefix 2602:f93b:131::1/128
       set policy prefix-list6 Tunnel-Endpoints rule 10 le 128
+      delete policy as-path-list AS-PassGFW
+      set policy as-path-list AS-PassGFW rule 10 action permit
+      set policy as-path-list AS-PassGFW rule 10 description "Edgecast"
+      set policy as-path-list AS-PassGFW rule 10 regex 15133$
+      set policy as-path-list AS-PassGFW rule 20 action permit
+      set policy as-path-list AS-PassGFW rule 20 description "Fastly"
+      set policy as-path-list AS-PassGFW rule 20 regex 54113$
+      set policy as-path-list AS-PassGFW rule 30 action permit
+      set policy as-path-list AS-PassGFW rule 30 description "Google"
+      set policy as-path-list AS-PassGFW rule 30 regex 15169|16550|16591|19527|36040|43515|139070|139190|396982$
+      set policy as-path-list AS-PassGFW rule 40 action permit
+      set policy as-path-list AS-PassGFW rule 40 description "Telegram"
+      set policy as-path-list AS-PassGFW rule 40 regex 62014|62041|59930$
+      set policy as-path-list AS-PassGFW rule 50 action permit
+      set policy as-path-list AS-PassGFW rule 50 description "Twitter"
+      set policy as-path-list AS-PassGFW rule 50 regex 13414|35995|63179$
     protocols:
       rpki:
         - server: rtr.rpki.cloudflare.com
@@ -314,12 +330,33 @@ router:
             post-import-accept:
               - action: deny
                 match: ipv6 address prefix-list Tunnel-Endpoints
+          - description: BGP Tunnel to Home
+            neighbor-address: 169.254.11.2
+            update-source: wg1151
+            post-export-accept:
+              - action: permit
+                match: as-path AS-PassGFW
+                on-match-next: false
+              - action: deny
+                match: as-path AS-ALL
+          - description: BGP Tunnel to Home
+            neighbor-address: 2602:f93b:151:ffff::2
+            update-source: wg1151
+            post-export-accept:
+              - action: permit
+                match: as-path AS-PassGFW
+                on-match-next: false
+              - action: deny
+                match: as-path AS-ALL
         upstream:
           - asn: 134835
             neighbor-address: 10.1.52.253
             update-source: 103.27.185.43
             multihop: 2
             post-import-accept:
+              - action: permit
+                match: as-path AS-PassGFW
+                on-match-next: false
               - action: deny
                 match: as-path AS-Except-China
           - asn: 134835
@@ -327,8 +364,28 @@ router:
             update-source: 2403:ad80:88:44fd::9c38
             multihop: 2
             post-import-accept:
+              - action: permit
+                match: as-path AS-PassGFW
+                on-match-next: false
               - action: deny
                 match: as-path AS-Except-China
         routeserver: []
         peer: []
         downstream: []
+
+  - name: edge.zj.atlas.projectk.org
+    protocols:
+      rpki:
+        - server: rtr.rpki.cloudflare.com
+          port: 8282
+          preference: 10
+      bgp:
+        ibgp:
+          - description: BGP Tunnel to Tokyo
+            neighbor-address: 169.254.11.1
+            update-source: wg1151
+            simple-out: true
+          - description: BGP Tunnel to Tokyo
+            neighbor-address: 2602:f93b:151:ffff::1
+            update-source: wg1151
+            simple-out: true
