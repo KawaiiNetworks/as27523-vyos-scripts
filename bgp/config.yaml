@@ -389,3 +389,7 @@ router:
             neighbor-address: 2602:f93b:151:ffff::1
             update-source: wg1151
             simple-out: true
+        upstream: []
+        routeserver: []
+        peer: []
+        downstream: []
