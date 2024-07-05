@@ -297,19 +297,19 @@ router:
       delete policy as-path-list AS-PassGFW
       set policy as-path-list AS-PassGFW rule 10 action permit
       set policy as-path-list AS-PassGFW rule 10 description "Edgecast"
-      set policy as-path-list AS-PassGFW rule 10 regex 15133$
+      set policy as-path-list AS-PassGFW rule 10 regex '15133$'
       set policy as-path-list AS-PassGFW rule 20 action permit
       set policy as-path-list AS-PassGFW rule 20 description "Fastly"
-      set policy as-path-list AS-PassGFW rule 20 regex 54113$
+      set policy as-path-list AS-PassGFW rule 20 regex '54113$'
       set policy as-path-list AS-PassGFW rule 30 action permit
       set policy as-path-list AS-PassGFW rule 30 description "Google"
-      set policy as-path-list AS-PassGFW rule 30 regex 15169|16550|16591|19527|36040|43515|139070|139190|396982$
+      set policy as-path-list AS-PassGFW rule 30 regex '(15169|16550|16591|19527|36040|43515|139070|139190|396982)$'
       set policy as-path-list AS-PassGFW rule 40 action permit
       set policy as-path-list AS-PassGFW rule 40 description "Telegram"
-      set policy as-path-list AS-PassGFW rule 40 regex 62014|62041|59930$
+      set policy as-path-list AS-PassGFW rule 40 regex '(62014|62041|59930)$'
       set policy as-path-list AS-PassGFW rule 50 action permit
       set policy as-path-list AS-PassGFW rule 50 description "Twitter"
-      set policy as-path-list AS-PassGFW rule 50 regex 13414|35995|63179$
+      set policy as-path-list AS-PassGFW rule 50 regex '(13414|35995|63179)$'
     protocols:
       rpki:
         - server: rtr.rpki.cloudflare.com
