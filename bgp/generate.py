@@ -346,7 +346,7 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
                 set policy route-map {route_map_in_name} rule {r} set {c["set"]}
                 """
             # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
-            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"].lower() == "true"):
+            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} on-match next
                 """
@@ -375,7 +375,7 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
                 set policy route-map {route_map_out_name} rule {r} set {c["set"]}
                 """
             # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
-            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"].lower() == "true"):
+            if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} on-match next
                 """
@@ -470,8 +470,8 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     if "multihop" in neighbor:
         if isinstance(neighbor["multihop"], int):
             multihop = neighbor["multihop"]
-        else:  # str
-            multihop = neighbor["multihop"].lower() == "true"
+        else:
+            multihop = False
     else:
         multihop = False
 
@@ -635,8 +635,8 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     if "multihop" in neighbor:
         if isinstance(neighbor["multihop"], int):
             multihop = neighbor["multihop"]
-        else:  # str
-            multihop = neighbor["multihop"].lower() == "true"
+        else:
+            multihop = False
     else:
         multihop = False
 
