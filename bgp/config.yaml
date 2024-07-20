@@ -313,6 +313,9 @@ router:
       set policy as-path-list AS-PassGFW rule 60 action permit
       set policy as-path-list AS-PassGFW rule 60 description "Cloudflare"
       set policy as-path-list AS-PassGFW rule 60 regex '13335$'
+      set policy as-path-list AS-PassGFW rule 70 action permit
+      set policy as-path-list AS-PassGFW rule 70 description "IDC Frontier"
+      set policy as-path-list AS-PassGFW rule 70 regex '4694$'
     protocols:
       rpki:
         - server: rtr.rpki.cloudflare.com
