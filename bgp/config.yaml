@@ -310,6 +310,9 @@ router:
       set policy as-path-list AS-PassGFW rule 50 action permit
       set policy as-path-list AS-PassGFW rule 50 description "Twitter"
       set policy as-path-list AS-PassGFW rule 50 regex '(13414|35995|63179)$'
+      set policy as-path-list AS-PassGFW rule 60 action permit
+      set policy as-path-list AS-PassGFW rule 60 description "Cloudflare"
+      set policy as-path-list AS-PassGFW rule 60 regex '13335$'
     protocols:
       rpki:
         - server: rtr.rpki.cloudflare.com
