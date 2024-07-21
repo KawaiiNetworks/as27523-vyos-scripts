@@ -318,7 +318,7 @@ router:
       set policy as-path-list AS-PassGFW rule 70 regex '4694$'
       set policy as-path-list AS-PassGFW rule 80 action permit
       set policy as-path-list AS-PassGFW rule 80 description "Amazon for docker"
-      set policy as-path-list AS-PassGFW rule 80 regex '14618$'
+      set policy as-path-list AS-PassGFW rule 80 regex '(14618|16509)$'
     protocols:
       rpki:
         - server: rtr.rpki.cloudflare.com
