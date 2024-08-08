@@ -93,38 +93,42 @@ router:
           - asn: 33108
             description: SIX IPv4 RS2
             neighbor-address: 206.81.80.2
-            metric: "+5"
+            metric: "+10"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv6 RS2
             neighbor-address: 2001:504:16::2
-            metric: "+5"
+            metric: "+10"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv4 RS3
             neighbor-address: 206.81.80.3
-            metric: "+5"
+            metric: "+10"
             update-source: eth3.2
           - asn: 33108
             description: SIX IPv6 RS3
             neighbor-address: 2001:504:16::3
-            metric: "+5"
+            metric: "+10"
             update-source: eth3.2
           - asn: 33108
             description: SIX Jumbo IPv4 RS2
             neighbor-address: 206.81.82.2
+            metric: "+5"
             update-source: eth3.3
           - asn: 33108
             description: SIX Jumbo IPv6 RS2
             neighbor-address: 2001:504:16:1::2
+            metric: "+5"
             update-source: eth3.3
           - asn: 33108
             description: SIX Jumbo IPv4 RS3
             neighbor-address: 206.81.82.3
+            metric: "+5"
             update-source: eth3.3
           - asn: 33108
             description: SIX Jumbo IPv6 RS3
             neighbor-address: 2001:504:16:1::3
+            metric: "+5"
             update-source: eth3.3
           - asn: 40542
             description: KCIX IPv4 RS
