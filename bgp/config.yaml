@@ -271,24 +271,6 @@ router:
             neighbor-address: 2602:f93b:ffff:131::40:1009:1
             update-source: eth6
 
-  - name: core.sea.atlas.projectk.org
-    protocols:
-      rpki:
-        - server: rtr.rpki.cloudflare.com
-          port: 8282
-          preference: 10
-      bgp:
-        ibgp:
-          - description: BGP Tunnel to MCI
-            neighbor-address: 169.254.20.1
-            update-source: tun10
-        upstream:
-          - asn: 50131
-            manual: true
-        routeserver: []
-        peer: []
-        downstream: []
-
   - name: core.tyo.atlas.projectk.org
     src:
       ipv4: 103.27.185.43
@@ -403,6 +385,38 @@ router:
             update-source: wg1151
             simple-out: true
         upstream: []
+        routeserver: []
+        peer: []
+        downstream: []
+
+  - name: core.hk.atlas.projectk.org
+    src:
+      ipv4: 45.148.132.153
+      ipv6: 2602:f93b:121::1
+    protocols:
+      rpki:
+        - server: rtr.rpki.cloudflare.com
+          port: 8282
+          preference: 10
+      bgp:
+        ibgp: []
+        upstream:
+          - asn: 955
+            description: LSHIY Upstream
+            multihop: 255
+            neighbor-address: 103.203.242.1
+            update-source: eth0
+            post-import-accept:
+              - action: deny
+                match: as-path AS-ALL
+          - asn: 955
+            description: LSHIY Upstream
+            multihop: 255
+            neighbor-address: 2401:4020:1:1::1
+            update-source: eth0
+            post-import-accept:
+              - action: deny
+                match: as-path AS-ALL
         routeserver: []
         peer: []
         downstream: []
