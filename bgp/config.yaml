@@ -406,6 +406,7 @@ router:
             multihop: 255
             neighbor-address: 103.203.242.1
             update-source: eth0
+            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-ALL
@@ -414,6 +415,7 @@ router:
             multihop: 255
             neighbor-address: 2401:4020:1:1::1
             update-source: eth0
+            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-ALL
