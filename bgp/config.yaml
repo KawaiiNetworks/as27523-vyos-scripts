@@ -422,3 +422,51 @@ router:
         routeserver: []
         peer: []
         downstream: []
+
+  - name: core.tpe.atlas.projectk.org
+    src:
+      ipv4: 103.147.22.125
+      ipv6: 2602:f93b:141::1
+    protocols:
+      rpki:
+        - server: rtr.rpki.cloudflare.com
+          port: 8282
+          preference: 10
+      bgp:
+        ibgp: []
+        upstream:
+          - asn: 6939
+            description: HE Upstream
+            neighbor-address: 2a0f:5707:ffe3::30
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+            post-import-accept:
+              - action: deny
+                match: as-path AS-ALL
+        routeserver:
+          - asn: 38855
+            description: STUIX IPv4 RS1
+            neighbor-address: 103.158.187.1
+            update-source: eth1
+          - asn: 38855
+            description: STUIX IPv4 RS2
+            neighbor-address: 103.158.187.2
+            update-source: eth1
+          - asn: 38855
+            description: STUIX IPv6 RS1
+            neighbor-address: 2a0f:5707:ffe3::1
+            update-source: eth1
+          - asn: 38855
+            description: STUIX IPv6 RS2
+            neighbor-address: 2a0f:5707:ffe3::2
+            update-source: eth1
+        peer:
+          - asn: 6939
+            description: HE Peer
+            neighbor-address: 103.158.187.30
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+            post-import-accept:
+              - action: deny
+                match: as-path AS-ALL
+        downstream: []
