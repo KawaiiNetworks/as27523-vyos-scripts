@@ -451,7 +451,7 @@ router:
             soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
-                match: as-path AS-ALL
+                match: as-path AS-Tier1
           - asn: 38855
             description: STUIX IPv4 RS2
             neighbor-address: 103.158.187.2
@@ -459,7 +459,7 @@ router:
             soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
-                match: as-path AS-ALL
+                match: as-path AS-Tier1
           - asn: 38855
             description: STUIX IPv6 RS1
             neighbor-address: 2a0f:5707:ffe3::1
@@ -467,7 +467,7 @@ router:
             soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
-                match: as-path AS-ALL
+                match: as-path AS-Tier1
           - asn: 38855
             description: STUIX IPv6 RS2
             neighbor-address: 2a0f:5707:ffe3::2
@@ -475,7 +475,7 @@ router:
             soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
-                match: as-path AS-ALL
+                match: as-path AS-Tier1
         peer:
           - asn: 6939
             description: HE Peer
