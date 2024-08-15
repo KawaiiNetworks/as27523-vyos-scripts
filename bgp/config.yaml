@@ -448,18 +448,22 @@ router:
             description: STUIX IPv4 RS1
             neighbor-address: 103.158.187.1
             update-source: eth1
+            soft-reconfiguration-inbound: false
           - asn: 38855
             description: STUIX IPv4 RS2
             neighbor-address: 103.158.187.2
             update-source: eth1
+            soft-reconfiguration-inbound: false
           - asn: 38855
             description: STUIX IPv6 RS1
             neighbor-address: 2a0f:5707:ffe3::1
             update-source: eth1
+            soft-reconfiguration-inbound: false
           - asn: 38855
             description: STUIX IPv6 RS2
             neighbor-address: 2a0f:5707:ffe3::2
             update-source: eth1
+            soft-reconfiguration-inbound: false
         peer:
           - asn: 6939
             description: HE Peer
