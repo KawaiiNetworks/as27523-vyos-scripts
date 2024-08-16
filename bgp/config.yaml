@@ -485,4 +485,28 @@ router:
             post-import-accept:
               - action: deny
                 match: as-path AS-ALL
+          - asn: 13335
+            neighbor-address: 103.158.187.34
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+          - asn: 13335
+            neighbor-address: 2a0f:5707:ffe3::34
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+          - asn: 16509
+            neighbor-address: 103.158.187.36
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+          - asn: 16509
+            neighbor-address: 2a0f:5707:ffe3::36
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+          - asn: 16509
+            neighbor-address: 103.158.187.45
+            update-source: eth1
+            soft-reconfiguration-inbound: false
+          - asn: 16509
+            neighbor-address: 2a0f:5707:ffe3::45
+            update-source: eth1
+            soft-reconfiguration-inbound: false
         downstream: []
