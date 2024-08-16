@@ -138,7 +138,7 @@ router:
             description: KCIX IPv6 RS
             neighbor-address: 2001:504:1b:1::126
             update-source: eth2
-          - asn: 210979
+          - asn: 40115
             description: Pigeon IX MCI RS
             neighbor-address: 2602:f9f6:7e0:5::1
             local-pref: 125
