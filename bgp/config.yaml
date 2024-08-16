@@ -415,7 +415,6 @@ router:
             multihop: 255
             neighbor-address: 2401:4020:1:1::1
             update-source: eth0
-            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-ALL
@@ -439,7 +438,6 @@ router:
             description: HE Upstream
             neighbor-address: 2a0f:5707:ffe3::30
             update-source: eth1
-            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-ALL
@@ -464,7 +462,6 @@ router:
             description: STUIX IPv6 RS1
             neighbor-address: 2a0f:5707:ffe3::1
             update-source: eth1
-            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-Tier1
@@ -472,7 +469,6 @@ router:
             description: STUIX IPv6 RS2
             neighbor-address: 2a0f:5707:ffe3::2
             update-source: eth1
-            soft-reconfiguration-inbound: false
             post-import-accept:
               - action: deny
                 match: as-path AS-Tier1
@@ -488,25 +484,19 @@ router:
           - asn: 13335
             neighbor-address: 103.158.187.34
             update-source: eth1
-            soft-reconfiguration-inbound: false
           - asn: 13335
             neighbor-address: 2a0f:5707:ffe3::34
             update-source: eth1
-            soft-reconfiguration-inbound: false
           - asn: 16509
             neighbor-address: 103.158.187.36
             update-source: eth1
-            soft-reconfiguration-inbound: false
           - asn: 16509
             neighbor-address: 2a0f:5707:ffe3::36
             update-source: eth1
-            soft-reconfiguration-inbound: false
           - asn: 16509
             neighbor-address: 103.158.187.45
             update-source: eth1
-            soft-reconfiguration-inbound: false
           - asn: 16509
             neighbor-address: 2a0f:5707:ffe3::45
             update-source: eth1
-            soft-reconfiguration-inbound: false
         downstream: []
