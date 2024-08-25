@@ -1,5 +1,6 @@
 if [ ! -d "/config/myapp" ]; then
     sudo mkdir -p /config/myapp
+fi
 
 sudo chown vyos -R /config/myapp
 
