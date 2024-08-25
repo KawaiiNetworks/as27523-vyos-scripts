@@ -870,15 +870,18 @@ def get_final_vyos_cmd(router_config):
     configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
 
     # bmp
-    configure += get_vyos_bmp(router_config["service"]["bmp"])
+    if "bmp" in router_config["service"]:
+        configure += get_vyos_bmp(router_config["service"]["bmp"])
 
     # sflow
-    configure += get_vyos_sflow(router_config["service"]["sflow"])
+    if "sflow" in router_config["service"]:
+        configure += get_vyos_sflow(router_config["service"]["sflow"])
 
     # snmp
-    configure += get_vyos_snmp(
-        router_config["service"]["snmp"], ipv4_to_engineid(router_id)
-    )
+    if "snmp" in router_config["service"]:
+        configure += get_vyos_snmp(
+            router_config["service"]["snmp"], ipv4_to_engineid(router_id)
+        )
 
     # set route src
     if "src" in router_config:
