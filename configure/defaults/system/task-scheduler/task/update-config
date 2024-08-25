@@ -7,7 +7,7 @@ sudo chown vyos -R /config/myapp
 cat <<EOL > /config/myapp/update-config.sh
 #!/bin/bash
 
-wget -O /config/myapp/${ROUTER}.sh https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/${ROUTER}.sh
+wget -O /config/myapp/${ROUTER}.sh https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/configure.${ROUTER}.sh
 vbash /config/myapp/${ROUTER}.sh | tee /config/myapp/configure.log
 rm /config/myapp/${ROUTER}.sh
 EOL
