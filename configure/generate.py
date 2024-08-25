@@ -917,8 +917,9 @@ source /opt/vyatta/etc/functions/script-template
     script_end = r"""exit"""
 
     script_env = f"""
-    ASN={local_asn}
-    ROUTER={router_name}
+ASN={local_asn}
+ROUTER={router_name}
+GITHUB_REPOSITORY={os.getenv("GITHUB_REPOSITORY")}
     """
 
     #################################
