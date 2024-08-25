@@ -1,0 +1,18 @@
+if [ ! -d "/config/myapp" ]; then
+    sudo mkdir -p /config/myapp
+
+sudo chown vyos -R /config/myapp
+
+cat <<EOL > /config/myapp/update-config.sh
+#!/bin/bash
+
+wget -O /config/myapp/${ROUTER}.sh https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/${ROUTER}.sh
+vbash /config/myapp/${ROUTER}.sh | tee /config/myapp/configure.log
+rm /config/myapp/${ROUTER}.sh
+EOL
+
+chmod +x /config/myapp/update-config.sh
+
+delete system task-scheduler task update-config
+set system task-scheduler task update-config executable path '/config/myapp/update-config.sh'
+set system task-scheduler task update-config interval '12h'

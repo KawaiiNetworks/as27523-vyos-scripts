@@ -5,25 +5,29 @@ import ipaddress
 import json
 import yaml
 import time
+import re
 import dns.resolver
 from copy import deepcopy
 from aggregate_prefixes import aggregate_prefixes
 
-
 work_dir = os.path.dirname(os.path.abspath(__file__))
+github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
+github_repo = os.getenv("GITHUB_REPOSITORY").split("/")[-1]
+local_asn = re.search(r"as(\d+)", github_repo.lower()).group(1)
 config = yaml.safe_load(
-    open(os.path.join(work_dir, "config.yaml"), "r", encoding="utf-8")
+    requests.get(
+        f"https://raw.githubusercontent.com/{github_user}/AS{local_asn}/main/network/vyos/vyos.yaml",
+        timeout=30,
+    ).text
 )
 
-local_asn = config["local-asn"]
-router_list = config["router"]
 
 defaultconfig = ""
 for root, dirs, files in os.walk(os.path.join(work_dir, "defaults")):
     for file in files:
         defaultconfig += open(os.path.join(root, file), "r", encoding="utf-8").read()
         defaultconfig += "\n"
-defaultconfig = defaultconfig.replace("%ASN%", str(local_asn))
+defaultconfig = defaultconfig.replace(r"${ASN}", str(local_asn))
 
 asset_name_map = {}
 """as:as-set"""
@@ -749,6 +753,66 @@ def get_vyos_set_src(router_config):
     return cmd
 
 
+def get_vyos_bmp(bmp_config):
+    cmd = """
+    set system frr bmp
+    delete protocols bgp bmp
+    """
+    for bmp_server in bmp_config:
+        cmd += f"""
+        set protocols bgp bmp target {bmp_server["target"]} address {bmp_server["address"]}
+        set protocols bgp bmp target {bmp_server["target"]} port {bmp_server["port"]}
+        """
+        if "mirror" in bmp_server and not bmp_server["mirror"]:
+            cmd += f"""
+            set protocols bgp bmp target {bmp_server["target"]} monitor ipv4-unicast post-policy
+            set protocols bgp bmp target {bmp_server["target"]} monitor ipv6-unicast post-policy
+            """
+        else:
+            cmd += f"""
+            set protocols bgp bmp target {bmp_server["target"]} mirror
+            """
+    return cmd
+
+
+def get_vyos_sflow(sflow_config):
+    cmd = f"""
+    delete system sflow
+    set system sflow agent-address {sflow_config["agent-address"]}
+    """
+    for sflow_server in sflow_config["server"]:
+        cmd += f"""
+        set system sflow server {sflow_server["address"]} port {sflow_server["port"]}
+        """
+    for sflow_interface in sflow_config["interface"]:
+        cmd += f"""
+        set system sflow interface {sflow_interface}
+        """
+    return cmd
+
+
+def get_vyos_snmp(snmp_config, engineid):
+    cmd = f"""
+    delete service snmp
+    set service snmp listen-address {snmp_config["listen-address"]}
+    set service snmp location '{snmp_config["location"]}'
+    set service snmp v3 engineid {engineid}
+    set service snmp v3 group default mode ro
+    set service snmp v3 group default view default
+    set service snmp v3 user vyos auth encrypted-password {snmp_config["encrypted-password"]}
+    set service snmp v3 user vyos auth type sha
+    set service snmp v3 user vyos group default
+    set service snmp v3 user vyos privacy encrypted-password {snmp_config["encrypted-password"]}
+    set service snmp v3 user vyos privacy type aes
+    set service snmp v3 view default oid 1
+    """
+    return cmd
+
+
+def ipv4_to_engineid(ipv4):
+    return "000000000000" + "".join([part.zfill(3) for part in ipv4.split(".")])
+
+
 def get_final_vyos_cmd(router_config):
     """cmd to configure vyos"""
 
@@ -805,6 +869,17 @@ def get_final_vyos_cmd(router_config):
     # protocol bgp
     configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
 
+    # bmp
+    configure += get_vyos_bmp(router_config["service"]["bmp"])
+
+    # sflow
+    configure += get_vyos_sflow(router_config["service"]["sflow"])
+
+    # snmp
+    configure += get_vyos_snmp(
+        router_config["service"]["snmp"], ipv4_to_engineid(router_id)
+    )
+
     # set route src
     if "src" in router_config:
         configure += get_vyos_set_src(router_config)
@@ -837,13 +912,19 @@ source /opt/vyatta/etc/functions/script-template
 """
     script_end = r"""exit"""
 
+    script_env = f"""
+    ASN={local_asn}
+    ROUTER={router_name}
+    """
+
     #################################
 
-    return script_start + configure + script_end
+    return script_start + script_env + configure + script_end
 
 
 if __name__ == "__main__":
 
+    router_list = config["router"]
     if not router_list:
         raise ValueError("router list is empty")
 

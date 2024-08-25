@@ -3,6 +3,6 @@ set policy route-map IBGP-IN rule 10 action 'permit'
 set policy route-map IBGP-IN rule 10 call 'FILTER-IBGP'
 set policy route-map IBGP-IN rule 10 on-match next
 set policy route-map IBGP-IN rule 20 action 'permit'
-set policy route-map IBGP-IN rule 20 set large-community add '%ASN%:0:100'
+set policy route-map IBGP-IN rule 20 set large-community add "${ASN}:0:100"
 set policy route-map IBGP-IN rule 20 set local-preference '90'
 set policy route-map IBGP-IN rule 20 set metric '1000'
