@@ -1,4 +1,4 @@
-name: Generate and Upload set-bgp.sh
+name: Generate and Upload configure.sh
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: bgp
+        working-directory: configure
 
     steps:
       - name: Checkout repository
@@ -30,13 +30,7 @@ jobs:
           bash install-dependencies.sh
 
       - name: Generate script
-        run: mkdir outputs && python generate.py | tee outputs/generate-bgp.log
-
-      # - name: Upload script to GitHub Packages
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: set-bgp.sh
-      #     path: bgp/set-bgp.sh
+        run: mkdir outputs && python generate.py | tee outputs/generate.log
 
       - name: Update nightly release
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -44,7 +38,7 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "nightly"
           prerelease: true
-          title: "nightly bgp configuration"
+          title: "nightly vyos configuration"
           files: |
-            bgp/outputs/generate-bgp.log
-            bgp/outputs/*.sh
+            configure/outputs/generate.log
+            configure/outputs/*.sh

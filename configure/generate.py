@@ -853,9 +853,9 @@ if __name__ == "__main__":
     for router in router_list:
         script = get_final_vyos_cmd(router)
         with open(
-            os.path.join(work_dir, "outputs", f"set-bgp.{router['name']}.sh"),
+            os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
             "w",
             encoding="utf-8",
         ) as f:
             f.write(script)
-        print(f"set-bgp.{router['name']}.sh generated.")
+        print(f"configure.{router['name']}.sh generated.")
