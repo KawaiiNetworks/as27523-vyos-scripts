@@ -1,3 +1,1 @@
-peer prefix limit
-prefixes aggregates
 blacklist

@@ -1,3 +1,4 @@
+from copy import deepcopy
 import requests
 import os
 import subprocess
@@ -7,8 +8,6 @@ import yaml
 import time
 import re
 import dns.resolver
-from copy import deepcopy
-from aggregate_prefixes import aggregate_prefixes
 
 work_dir = os.path.dirname(os.path.abspath(__file__))
 github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
@@ -32,10 +31,16 @@ defaultconfig = defaultconfig.replace(r"${ASN}", str(local_asn))
 asset_name_map = {}
 """as:as-set"""
 
+maximum_prefix_map = {}
+"""as:(maximum-prefix4, maximum-prefix6)"""
+
 cone_map = {}
 """as:[as-set member]"""
 
 prefix_matrix_map = {}
+"""(ipversion, as):[(network, length, ge, le, object_mask, invert_mask)]"""
+
+cone_prefix_matrix_map = {}
 """(ipversion, as):[(network, length, ge, le, object_mask, invert_mask)]"""
 
 
@@ -54,16 +59,20 @@ def get_router_id(router_name):
 def get_asset_name(asn):
     """use peeringdb to get as-set name"""
 
-    time.sleep(5)
-
     if asn in asset_name_map:
         return deepcopy(asset_name_map[asn])
 
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
 
+    time.sleep(5)
+
     try:
-        response = requests.get(url, timeout=10)
-        res = response.json()["data"][0]["irr_as_set"].split()
+        response = requests.get(url, timeout=10).json()["data"][0]
+        maximum_prefix_map[asn] = (
+            response["info_prefixes4"],
+            response["info_prefixes6"],
+        )
+        res = response["irr_as_set"].split()
         new_res = []
         for n in res:
             if "::" in n:
@@ -71,6 +80,9 @@ def get_asset_name(asn):
                 new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
             else:
                 new_res.append(n)
+        if not new_res:
+            print(f"AS{asn} as-set name not found, use default AS{asn}")
+            new_res = [f"AS{asn}"]
     except Exception as e:
         print(f"get as-set name for AS{asn} failed: {e}")
         new_res = [f"AS{asn}"]
@@ -87,10 +99,6 @@ def get_as_set_member(asn):
         return deepcopy(cone_map[asn])
 
     asset_name_list = get_asset_name(asn)  # an asn may have multiple as-set
-    if not asset_name_list:
-        cone_map[asn] = [asn]
-        print(f"AS{asn} cone list: {cone_map[asn]}")
-        return cone_map[asn]
 
     res = []
 
@@ -113,7 +121,7 @@ def get_as_set_member(asn):
     return deepcopy(res)
 
 
-def get_prefix_matrix(ipversion, asn, aggregate=False):
+def get_prefix_matrix(ipversion, asn):
     """use bgpq4 to get prefix matrix"""
 
     if (ipversion, asn) in prefix_matrix_map:
@@ -135,25 +143,43 @@ def get_prefix_matrix(ipversion, asn, aggregate=False):
         for line in res:
             prefix_matrix.append(tuple(line.split(",")))
 
-        if aggregate:
-            prefix_matrix = list(
-                aggregate_prefixes([f"{p[0]}/{p[1]}" for p in prefix_matrix])
-            )
-            prefix_matrix = [
-                (
-                    x.network_address.exploded,
-                    x.prefixlen,
-                    x.prefixlen,
-                    24 if ipversion == 4 else 48,
-                )
-                for x in prefix_matrix
-            ]
-
     except Exception as e:
         raise e
     prefix_matrix_map[(ipversion, asn)] = prefix_matrix
     print(f"AS{asn} prefix{ipversion} matrix generated.")
     return deepcopy(prefix_matrix)
+
+
+def get_cone_prefix_matrix(ipversion, asn):
+    """use bgpq4 to get cone prefix matrix of an asn"""
+
+    if (ipversion, asn) in cone_prefix_matrix_map:
+        return deepcopy(cone_prefix_matrix_map[(ipversion, asn)])
+
+    asset_name_list = get_asset_name(asn)
+    cone_prefix_matrix = []
+    for asset_name in asset_name_list:
+        try:
+            cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" {asset_name}'
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+            )
+            res = result.stdout.splitlines()
+            res = [x for x in res if x]
+            for line in res:
+                cone_prefix_matrix.append(tuple(line.split(",")))
+        except Exception as e:
+            raise e
+
+    cone_prefix_matrix = sorted(list(set(cone_prefix_matrix)))
+    cone_prefix_matrix_map[(ipversion, asn)] = cone_prefix_matrix
+    print(f"AS{asn} cone prefix{ipversion} matrix generated.")
+    return deepcopy(cone_prefix_matrix)
 
 
 def get_vyos_as_path(asn):
@@ -201,12 +227,8 @@ def get_vyos_as_path(asn):
     return full_vyos_cmd
 
 
-def get_vyos_prefix_list(
-    ipversion, asn, max_length=None, filter_name=None, cone=False, aggregate=False
-):
+def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone=False):
     """use bgpq4 to get prefix list filter"""
-
-    # if aggregate is True it can reduce the number of configuration lines
 
     def vyos_cmd(network, length, ge, le, rule):
         # r = str(rule)
@@ -217,10 +239,10 @@ def get_vyos_prefix_list(
         set policy {pl} {fn} rule {rule} le {max_length if max_length else le}
         """
 
-    def vyos_cmd_when_limit_violation(pl, fn, cone_count, prefix_count):
+    def vyos_cmd_when_limit_violation(pl, fn, prefix_count):
         if config["as-set"]["limit-violation"] == "accept":
             print(
-                f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone number({cone_count})/prefix number({prefix_count}) is too large, filter will accept all prefix."
+                f"Warn: AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will accept all prefix."
             )
             return f"""
             set policy {pl} {fn} rule 10 action permit
@@ -229,7 +251,7 @@ def get_vyos_prefix_list(
             """
         elif config["as-set"]["limit-violation"] == "deny":
             print(
-                f"Warn: AS{asn} cone prefix{ipversion} list generated. But cone number({cone_count})/prefix number({prefix_count}) is too large, filter will deny all prefix except {asn}."
+                f"Warn: AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will deny all prefix."
             )
             return f"""
             set policy {pl} {fn} rule 10 action deny
@@ -254,34 +276,11 @@ def get_vyos_prefix_list(
     full_vyos_cmd = f"delete policy {pl} {fn}\n"
 
     if cone:
-        cone_asn_list = get_as_set_member(asn)
-
-        if len(cone_asn_list) > config["as-set"]["member-limit"]:
-            full_vyos_cmd += vyos_cmd_when_limit_violation(
-                pl, fn, len(cone_asn_list), "not counted"
-            )
-            return full_vyos_cmd
-
-        prefix_matrix = []
-        for x in cone_asn_list:
-            prefix_matrix.extend(get_prefix_matrix(ipversion, x, aggregate=aggregate))
-        if len(prefix_matrix) > config["as-set"]["prefix-limit"]:
-            full_vyos_cmd += vyos_cmd_when_limit_violation(
-                pl, fn, len(cone_asn_list), len(prefix_matrix)
-            )
-            return full_vyos_cmd
+        prefix_matrix = get_cone_prefix_matrix(ipversion, asn)
     else:
-        prefix_matrix = get_prefix_matrix(ipversion, asn, aggregate=aggregate)
+        prefix_matrix = get_prefix_matrix(ipversion, asn)
 
-    prefix_matrix = sorted(list(set(prefix_matrix)))
-    if len(prefix_matrix) > 0:
-        c = 1
-        for prefix in prefix_matrix:
-            full_vyos_cmd += vyos_cmd(*prefix, c)
-            c += 1
-        del c
-        print(f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated.")
-    else:
+    if len(prefix_matrix) == 0:
         full_vyos_cmd += f"""
         set policy {pl} {fn} rule 10 action deny
         set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
@@ -290,10 +289,19 @@ def get_vyos_prefix_list(
         print(
             f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
         )
+    elif len(prefix_matrix) > config["as-set"]["prefix-limit"]:
+        full_vyos_cmd += vyos_cmd_when_limit_violation(pl, fn, len(prefix_matrix))
+    else:
+        c = 1
+        for prefix in prefix_matrix:
+            full_vyos_cmd += vyos_cmd(*prefix, c)
+            c += 1
+        del c
+        print(f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated.")
     return full_vyos_cmd
 
 
-def get_vyos_as_filter(asn, _role):
+def get_vyos_as_filter(asn):
     full_vyos_cmd = ""
     full_vyos_cmd += get_vyos_as_path(asn)
     full_vyos_cmd += get_vyos_prefix_list(4, asn, cone=True)
@@ -585,6 +593,10 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    maximum_prefix = (
+        maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+    )
+
     password = neighbor["password"] if "password" in neighbor else None
 
     bgp_cmd = f"""
@@ -595,6 +607,8 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    {f"set protocols bgp neighbor {neighbor_address} disable" if maximum_prefix==0 else ""}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
@@ -638,6 +652,10 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
 
     ipversion = ipaddress.ip_address(neighbor_address).version
 
+    maximum_prefix = (
+        maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+    )
+
     password = neighbor["password"] if "password" in neighbor else None
 
     if "multihop" in neighbor:
@@ -657,6 +675,8 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+    {f"set protocols bgp neighbor {neighbor_address} disable" if maximum_prefix==0 else ""}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
@@ -856,12 +876,7 @@ def get_final_vyos_cmd(router_config):
     connected_asns = peer_asns + downstream_asns
     connected_asns = sorted(list(set(connected_asns)))
     for asn in connected_asns:
-        role = []
-        if asn in peer_asns:
-            role.append("peer")
-        if asn in downstream_asns:
-            role.append("downstream")
-        configure += get_vyos_as_filter(asn, role)
+        configure += get_vyos_as_filter(asn)
 
     # protocol rpki
     configure += get_vyos_protocol_rpki(router_config["protocols"]["rpki"])
