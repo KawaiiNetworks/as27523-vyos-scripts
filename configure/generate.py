@@ -607,8 +607,8 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    {f"set protocols bgp neighbor {neighbor_address} disable" if maximum_prefix==0 else ""}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if maximum_prefix!=0 else ""}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
@@ -675,8 +675,8 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
     set protocols bgp neighbor {neighbor_address} solo
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    {f"set protocols bgp neighbor {neighbor_address} disable" if maximum_prefix==0 else ""}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if maximum_prefix!=0 else ""}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
