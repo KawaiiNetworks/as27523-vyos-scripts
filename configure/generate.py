@@ -773,9 +773,22 @@ def get_vyos_set_src(router_config):
     return cmd
 
 
+def get_vyos_system_frr():
+    return """
+    delete system frr
+    set system frr bmp
+    set system frr snmp bgpd
+    set system frr snmp isisd
+    set system frr snmp ldpd
+    set system frr snmp ospf6d
+    set system frr snmp ospfd
+    set system frr snmp ripd
+    set system frr snmp zebra
+    """
+
+
 def get_vyos_bmp(bmp_config):
     cmd = """
-    set system frr bmp
     delete protocols bgp bmp
     """
     for bmp_server in bmp_config:
@@ -883,6 +896,9 @@ def get_final_vyos_cmd(router_config):
 
     # protocol bgp
     configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
+
+    # system frr
+    configure += get_vyos_system_frr()
 
     if "service" in router_config:
         # bmp
