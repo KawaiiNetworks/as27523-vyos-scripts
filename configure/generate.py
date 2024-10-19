@@ -675,11 +675,6 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     maximum_prefix = (
         maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
     )
-    maximum_prefix_out = (
-        maximum_prefix_map[local_asn][0]
-        if ipversion == 4
-        else maximum_prefix_map[local_asn][1]
-    )
 
     password = neighbor["password"] if "password" in neighbor else None
 
@@ -702,7 +697,6 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
     {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if maximum_prefix!=0 else ""}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
