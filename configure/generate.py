@@ -435,6 +435,8 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-ibgp"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
@@ -499,6 +501,8 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Upstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
@@ -557,6 +561,8 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-RS"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
@@ -620,6 +626,8 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Peer"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
@@ -688,6 +696,8 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
 
     bgp_cmd = f"""
     delete protocols bgp neighbor {neighbor_address}
+    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
     set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Downstream"}'
     set protocols bgp neighbor {neighbor_address} graceful-restart enable
     set protocols bgp neighbor {neighbor_address} remote-as {asn}
