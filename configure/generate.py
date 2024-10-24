@@ -419,14 +419,18 @@ def get_bgp_neighbor_cmd(
     bgp_cmd = ""
     for i in neighbor_address:
         ipversion = ipaddress.ip_address(i).version
-        maximum_prefix = (
-            maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
-        )
-        maximum_prefix_out = (
-            maximum_prefix_map[local_asn][0]
-            if ipversion == 4
-            else maximum_prefix_map[local_asn][1]
-        )
+        if neighbor_type in ["Peer", "Downstream"]:
+            maximum_prefix = (
+                maximum_prefix_map[asn][0]
+                if ipversion == 4
+                else maximum_prefix_map[asn][1]
+            )
+        if neighbor_type in ["Upstream", "RS", "Peer"]:
+            maximum_prefix_out = (
+                maximum_prefix_map[local_asn][0]
+                if ipversion == 4
+                else maximum_prefix_map[local_asn][1]
+            )
         bgp_cmd += f"""
         delete protocols bgp neighbor {neighbor_address}
         {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
