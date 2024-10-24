@@ -442,7 +442,7 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
         set protocols bgp neighbor {neighbor_address} solo
         set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-        {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if neighbor_type in ["Peer", "Downstream"] and maximum_prefix==0 else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RS", "Peer"] else ""}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
