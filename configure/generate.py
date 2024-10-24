@@ -886,6 +886,7 @@ def get_final_vyos_cmd(router_config):
             else ""
         )
         + configure
+        + "echo 'configure done'\n"
         + "\ncommit\nexit\n"
     )
 
