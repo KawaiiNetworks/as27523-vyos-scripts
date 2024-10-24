@@ -400,11 +400,61 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
     return f
 
 
+def get_bgp_neighbor_cmd(
+    neighbor, neighbor_type, route_map_in_name, route_map_out_name
+):
+    if neighbor_type == "ibgp":
+        asn = local_asn
+    else:
+        asn = neighbor["asn"]
+    if "multihop" in neighbor and isinstance(neighbor["multihop"], int):
+        multihop = neighbor["multihop"]
+    else:
+        multihop = False
+    password = neighbor["password"] if "password" in neighbor else None
+    neighbor_address = neighbor["neighbor-address"]
+    if not isinstance(neighbor_address, list):
+        neighbor_address = [neighbor_address]
+
+    bgp_cmd = ""
+    for i in neighbor_address:
+        ipversion = ipaddress.ip_address(i).version
+        maximum_prefix = (
+            maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+        )
+        maximum_prefix_out = (
+            maximum_prefix_map[local_asn][0]
+            if ipversion == 4
+            else maximum_prefix_map[local_asn][1]
+        )
+        bgp_cmd += f"""
+        delete protocols bgp neighbor {neighbor_address}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+        {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
+        set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-{neighbor_type}"}'
+        set protocols bgp neighbor {neighbor_address} graceful-restart enable
+        set protocols bgp neighbor {neighbor_address} remote-as {asn}
+        {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
+        {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
+        set protocols bgp neighbor {neighbor_address} solo
+        set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RS", "Peer"] else ""}
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if (neighbor_type=="ibgp" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
+        {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
+        """
+
+    return bgp_cmd
+
+
 def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp ibgp"""
+    neighbor_type = "ibgp"
 
     asn = local_asn
-    neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"IBGP-IN-{neighbor_id}"
     route_map_out_name = f"IBGP-OUT-{neighbor_id}"
 
@@ -429,34 +479,18 @@ def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
-    ipversion = ipaddress.ip_address(neighbor_address).version
-
-    password = neighbor["password"] if "password" in neighbor else None
-
-    bgp_cmd = f"""
-    delete protocols bgp neighbor {neighbor_address}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
-    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-ibgp"}'
-    set protocols bgp neighbor {neighbor_address} graceful-restart enable
-    set protocols bgp neighbor {neighbor_address} remote-as {asn}
-    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
-    set protocols bgp neighbor {neighbor_address} solo
-    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if ("simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
+    bgp_cmd = get_bgp_neighbor_cmd(
+        neighbor, neighbor_type, route_map_in_name, route_map_out_name
+    )
 
     return final_filter + bgp_cmd
 
 
 def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp upstream"""
+    neighbor_type = "Upstream"
 
     asn = neighbor["asn"]
-    neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"AS{asn}-UPSTREAM-IN-{neighbor_id}"
     route_map_out_name = f"AS{asn}-UPSTREAM-OUT-{neighbor_id}"
 
@@ -481,50 +515,18 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
-    ipversion = ipaddress.ip_address(neighbor_address).version
-
-    maximum_prefix_out = (
-        maximum_prefix_map[local_asn][0]
-        if ipversion == 4
-        else maximum_prefix_map[local_asn][1]
+    bgp_cmd = get_bgp_neighbor_cmd(
+        neighbor, neighbor_type, route_map_in_name, route_map_out_name
     )
-
-    password = neighbor["password"] if "password" in neighbor else None
-
-    if "multihop" in neighbor:
-        if isinstance(neighbor["multihop"], int):
-            multihop = neighbor["multihop"]
-        else:
-            multihop = False
-    else:
-        multihop = False
-
-    bgp_cmd = f"""
-    delete protocols bgp neighbor {neighbor_address}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
-    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Upstream"}'
-    set protocols bgp neighbor {neighbor_address} graceful-restart enable
-    set protocols bgp neighbor {neighbor_address} remote-as {asn}
-    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
-    {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
-    set protocols bgp neighbor {neighbor_address} solo
-    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
 
     return final_filter + bgp_cmd
 
 
 def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp routeserver"""
+    neighbor_type = "RS"
 
     asn = neighbor["asn"]
-    neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"AS{asn}-ROUTESERVER-IN-{neighbor_id}"
     route_map_out_name = f"AS{asn}-ROUTESERVER-OUT-{neighbor_id}"
 
@@ -549,41 +551,18 @@ def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
-    ipversion = ipaddress.ip_address(neighbor_address).version
-
-    maximum_prefix_out = (
-        maximum_prefix_map[local_asn][0]
-        if ipversion == 4
-        else maximum_prefix_map[local_asn][1]
+    bgp_cmd = get_bgp_neighbor_cmd(
+        neighbor, neighbor_type, route_map_in_name, route_map_out_name
     )
-
-    password = neighbor["password"] if "password" in neighbor else None
-
-    bgp_cmd = f"""
-    delete protocols bgp neighbor {neighbor_address}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
-    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-RS"}'
-    set protocols bgp neighbor {neighbor_address} graceful-restart enable
-    set protocols bgp neighbor {neighbor_address} remote-as {asn}
-    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
-    set protocols bgp neighbor {neighbor_address} solo
-    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
 
     return final_filter + bgp_cmd
 
 
 def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp peer"""
+    neighbor_type = "Peer"
 
     asn = neighbor["asn"]
-    neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"AS{asn}-PEER-IN-{neighbor_id}"
     route_map_out_name = f"AS{asn}-PEER-OUT-{neighbor_id}"
 
@@ -611,46 +590,18 @@ def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
-    ipversion = ipaddress.ip_address(neighbor_address).version
-
-    maximum_prefix = (
-        maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+    bgp_cmd = get_bgp_neighbor_cmd(
+        neighbor, neighbor_type, route_map_in_name, route_map_out_name
     )
-    maximum_prefix_out = (
-        maximum_prefix_map[local_asn][0]
-        if ipversion == 4
-        else maximum_prefix_map[local_asn][1]
-    )
-
-    password = neighbor["password"] if "password" in neighbor else None
-
-    bgp_cmd = f"""
-    delete protocols bgp neighbor {neighbor_address}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
-    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Peer"}'
-    set protocols bgp neighbor {neighbor_address} graceful-restart enable
-    set protocols bgp neighbor {neighbor_address} remote-as {asn}
-    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
-    set protocols bgp neighbor {neighbor_address} solo
-    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
-    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if maximum_prefix!=0 else ""}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
 
     return final_filter + bgp_cmd
 
 
 def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     """cmd to configure vyos protocol bgp downstream"""
+    neighbor_type = "Downstream"
 
     asn = neighbor["asn"]
-    neighbor_address = neighbor["neighbor-address"]
     route_map_in_name = f"AS{asn}-DOWNSTREAM-IN-{neighbor_id}"
     route_map_out_name = f"AS{asn}-DOWNSTREAM-OUT-{neighbor_id}"
 
@@ -678,40 +629,9 @@ def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
 
-    ipversion = ipaddress.ip_address(neighbor_address).version
-
-    maximum_prefix = (
-        maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+    bgp_cmd = get_bgp_neighbor_cmd(
+        neighbor, neighbor_type, route_map_in_name, route_map_out_name
     )
-
-    password = neighbor["password"] if "password" in neighbor else None
-
-    if "multihop" in neighbor:
-        if isinstance(neighbor["multihop"], int):
-            multihop = neighbor["multihop"]
-        else:
-            multihop = False
-    else:
-        multihop = False
-
-    bgp_cmd = f"""
-    delete protocols bgp neighbor {neighbor_address}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
-    {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-    set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-Downstream"}'
-    set protocols bgp neighbor {neighbor_address} graceful-restart enable
-    set protocols bgp neighbor {neighbor_address} remote-as {asn}
-    {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
-    {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
-    set protocols bgp neighbor {neighbor_address} solo
-    set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-    {f"set protocols bgp neighbor {neighbor_address} shutdown" if maximum_prefix==0 else ""}
-    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if maximum_prefix!=0 else ""}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name}
-    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
 
     return final_filter + bgp_cmd
 
