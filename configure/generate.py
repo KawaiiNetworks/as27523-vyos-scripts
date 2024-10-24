@@ -412,13 +412,13 @@ def get_bgp_neighbor_cmd(
     else:
         multihop = False
     password = neighbor["password"] if "password" in neighbor else None
-    neighbor_address = neighbor["neighbor-address"]
-    if not isinstance(neighbor_address, list):
-        neighbor_address = [neighbor_address]
+    neighbor_address_list = neighbor["neighbor-address"]
+    if not isinstance(neighbor_address_list, list):
+        neighbor_address_list = [neighbor_address_list]
 
     bgp_cmd = ""
-    for i in neighbor_address:
-        ipversion = ipaddress.ip_address(i).version
+    for neighbor_address in neighbor_address_list:
+        ipversion = ipaddress.ip_address(neighbor_address).version
         if neighbor_type in ["Peer", "Downstream"]:
             maximum_prefix = (
                 maximum_prefix_map[asn][0]
