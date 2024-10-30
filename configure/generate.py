@@ -72,7 +72,7 @@ def get_as_info(asn):
         response["info_prefixes4"],
         response["info_prefixes6"],
     )
-    if response["aka"] != "":
+    if response["aka"] != "" and len(response["aka"]) < len(response["name"]):
         as_name_map[asn] = response["aka"]
     else:
         as_name_map[asn] = response["name"]

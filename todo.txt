@@ -1,5 +1,3 @@
 blacklist
 vrf?
 simple-ibgp-out add downstream, and delete /25-/32 and /49-/128?(小段backbone有用，暂时别删)
-auto generate description from peeringdb
-move as-path and prefix list filter from route map to frr
