@@ -28,6 +28,9 @@ for root, dirs, files in os.walk(os.path.join(work_dir, "defaults")):
         defaultconfig += "\n"
 defaultconfig = defaultconfig.replace(r"${ASN}", str(local_asn))
 
+as_name_map = {}
+"""as:name"""
+
 asset_name_map = {}
 """as:as-set"""
 
@@ -46,50 +49,51 @@ cone_prefix_matrix_map = {}
 
 def get_router_id(router_name):
     """use dns to get router-id"""
-    try:
-        answer = dns.resolver.resolve(router_name, "A")
-        if len(answer) != 1:
-            print("router-id for {router_name} is not unique")
-            return None
-        return answer[0].address
-    except Exception:
+
+    answer = dns.resolver.resolve(router_name, "A")
+    if len(answer) != 1:
+        print("router-id for {router_name} is not unique")
         return None
+    return answer[0].address
+
+
+def get_as_info(asn):
+    """use peeringdb to get as info"""
+
+    time.sleep(5)
+    url = f"https://www.peeringdb.com/api/net?asn={asn}"
+    print(f"getting AS{asn} info...")
+    response = requests.get(url, timeout=10).json()["data"][0]
+
+    maximum_prefix_map[asn] = (
+        response["info_prefixes4"],
+        response["info_prefixes6"],
+    )
+    if response["aka"] != "":
+        as_name_map[asn] = response["aka"]
+    else:
+        as_name_map[asn] = response["name"]
+    print(f"AS{asn} name: {as_name_map[asn]}")
+    as_set_str = response["irr_as_set"].split()
+    as_set_name_list = []
+    for n in as_set_str:
+        if "::" in n:
+            # 虽然这里有一个-S且别的命令那也有-S，但是这边-S在后面，会覆盖掉那些更多的数据库，使得最终只用指定的数据库
+            as_set_name_list.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
+        else:
+            as_set_name_list.append(n)
+    if not as_set_name_list:
+        print(f"AS{asn} as-set name not found, use default AS{asn}")
+        as_set_name_list = [f"AS{asn}"]
+
+    asset_name_map[asn] = as_set_name_list
+    print(f"AS{asn} as-set name: {as_set_name_list}")
 
 
 def get_asset_name(asn):
     """use peeringdb to get as-set name"""
 
-    if asn in asset_name_map:
-        return deepcopy(asset_name_map[asn])
-
-    url = f"https://www.peeringdb.com/api/net?asn={asn}"
-
-    time.sleep(5)
-
-    try:
-        response = requests.get(url, timeout=10).json()["data"][0]
-        maximum_prefix_map[asn] = (
-            response["info_prefixes4"],
-            response["info_prefixes6"],
-        )
-        res = response["irr_as_set"].split()
-        new_res = []
-        for n in res:
-            if "::" in n:
-                # 虽然这里有一个-S且别的命令那也有-S，但是这边-S在后面，会覆盖掉那些更多的数据库，使得最终只用指定的数据库
-                new_res.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
-            else:
-                new_res.append(n)
-        if not new_res:
-            print(f"AS{asn} as-set name not found, use default AS{asn}")
-            new_res = [f"AS{asn}"]
-    except Exception as e:
-        print(f"get as-set name for AS{asn} failed: {e}")
-        new_res = [f"AS{asn}"]
-
-    asset_name_map[asn] = new_res
-    print(f"AS{asn} as-set name: {new_res}")
-    return deepcopy(new_res)
+    return deepcopy(asset_name_map[asn])
 
 
 def get_as_set_member(asn):
@@ -129,22 +133,20 @@ def get_prefix_matrix(ipversion, asn):
 
     cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" as{asn} -l AS{asn}'
     prefix_matrix = []
-    try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-        )
-        res = result.stdout.splitlines()
-        res = [x for x in res if x]
-        for line in res:
-            prefix_matrix.append(tuple(line.split(",")))
 
-    except Exception as e:
-        raise e
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+    )
+    res = result.stdout.splitlines()
+    res = [x for x in res if x]
+    for line in res:
+        prefix_matrix.append(tuple(line.split(",")))
+
     prefix_matrix_map[(ipversion, asn)] = prefix_matrix
     print(f"AS{asn} prefix{ipversion} matrix generated.")
     return deepcopy(prefix_matrix)
@@ -159,22 +161,19 @@ def get_cone_prefix_matrix(ipversion, asn):
     asset_name_list = get_asset_name(asn)
     cone_prefix_matrix = []
     for asset_name in asset_name_list:
-        try:
-            cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" {asset_name}'
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                encoding="utf-8",
-            )
-            res = result.stdout.splitlines()
-            res = [x for x in res if x]
-            for line in res:
-                cone_prefix_matrix.append(tuple(line.split(",")))
-        except Exception as e:
-            raise e
+        cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" {asset_name}'
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+        )
+        res = result.stdout.splitlines()
+        res = [x for x in res if x]
+        for line in res:
+            cone_prefix_matrix.append(tuple(line.split(",")))
 
     cone_prefix_matrix = sorted(list(set(cone_prefix_matrix)))
     cone_prefix_matrix_map[(ipversion, asn)] = cone_prefix_matrix
@@ -437,7 +436,7 @@ def get_bgp_neighbor_cmd(
         delete protocols bgp neighbor {neighbor_address}
         {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
         {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-        set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"AS{asn}-{neighbor_type}"}'
+        set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"{neighbor_type}: {as_name_map[asn]}"}'
         set protocols bgp neighbor {neighbor_address} graceful-restart enable
         set protocols bgp neighbor {neighbor_address} remote-as {asn}
         {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
@@ -673,6 +672,21 @@ def get_final_vyos_cmd(router_config):
 
     configure = ""
 
+    # AS prefix list and AS filter
+    upstream_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["upstream"]]
+    routeserver_asns = [
+        n["asn"] for n in router_config["protocols"]["bgp"]["routeserver"]
+    ]
+    peer_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["peer"]]
+    downstream_asns = [
+        n["asn"] for n in router_config["protocols"]["bgp"]["downstream"]
+    ]
+    connected_asns = upstream_asns + routeserver_asns + peer_asns + downstream_asns
+    connected_asns = sorted(list(set(connected_asns)))
+    get_as_info(local_asn)
+    for asn in connected_asns:
+        get_as_info(asn)
+
     # local asn prefix list
     configure += get_vyos_prefix_list(
         4, local_asn, filter_name="LOCAL-ASN-CONE", cone=True
@@ -689,21 +703,8 @@ def get_final_vyos_cmd(router_config):
         6, local_asn, max_length=128, filter_name="LOCAL-ASN-PREFIX6-le128"
     )
 
-    # AS prefix list and AS filter
-    upstream_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["upstream"]]
-    routeserver_asns = [
-        n["asn"] for n in router_config["protocols"]["bgp"]["routeserver"]
-    ]
-    peer_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["peer"]]
-    downstream_asns = [
-        n["asn"] for n in router_config["protocols"]["bgp"]["downstream"]
-    ]
-
-    # connected_asns = upstream_asns + routeserver_asns + peer_asns + downstream_asns
     # we only need to generate filter for peer and downstream
-    connected_asns = peer_asns + downstream_asns
-    connected_asns = sorted(list(set(connected_asns)))
-    for asn in connected_asns:
+    for asn in sorted(list(set(peer_asns + downstream_asns))):
         configure += get_vyos_as_filter(asn)
 
     # protocol rpki
@@ -784,11 +785,14 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(work_dir, "outputs"))
 
     for router in router_list:
-        script = get_final_vyos_cmd(router)
-        with open(
-            os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            f.write(script)
-        print(f"configure.{router['name']}.sh generated.")
+        try:
+            script = get_final_vyos_cmd(router)
+            with open(
+                os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write(script)
+            print(f"configure.{router['name']}.sh generated.")
+        except Exception as e:
+            print(e)
