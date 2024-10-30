@@ -306,16 +306,16 @@ def get_vyos_as_filter(asn):
     full_vyos_cmd += get_vyos_as_path(asn)
     full_vyos_cmd += get_vyos_prefix_list(4, asn, cone=True)
     full_vyos_cmd += get_vyos_prefix_list(6, asn, cone=True)
-    full_vyos_cmd += f"""
-    delete policy route-map FILTER-AS{asn}-IN
-    set policy route-map FILTER-AS{asn}-IN rule 10 action permit
-    set policy route-map FILTER-AS{asn}-IN rule 10 match as-path AS{asn}-IN
-    set policy route-map FILTER-AS{asn}-IN rule 10 on-match next
-    set policy route-map FILTER-AS{asn}-IN rule 20 action permit
-    set policy route-map FILTER-AS{asn}-IN rule 20 match ip address prefix-list AS{asn}-CONE
-    set policy route-map FILTER-AS{asn}-IN rule 30 action permit
-    set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}-CONE
-    """
+    # full_vyos_cmd += f"""
+    # delete policy route-map FILTER-AS{asn}-IN
+    # set policy route-map FILTER-AS{asn}-IN rule 10 action permit
+    # set policy route-map FILTER-AS{asn}-IN rule 10 match as-path AS{asn}-IN
+    # set policy route-map FILTER-AS{asn}-IN rule 10 on-match next
+    # set policy route-map FILTER-AS{asn}-IN rule 20 action permit
+    # set policy route-map FILTER-AS{asn}-IN rule 20 match ip address prefix-list AS{asn}-CONE
+    # set policy route-map FILTER-AS{asn}-IN rule 30 action permit
+    # set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}-CONE
+    # """
 
     return full_vyos_cmd
 
@@ -403,7 +403,7 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
 def get_bgp_neighbor_cmd(
     neighbor, neighbor_type, route_map_in_name, route_map_out_name
 ):
-    if neighbor_type == "ibgp":
+    if neighbor_type == "IBGP":
         asn = local_asn
     else:
         asn = neighbor["asn"]
@@ -419,13 +419,15 @@ def get_bgp_neighbor_cmd(
     bgp_cmd = ""
     for neighbor_address in neighbor_address_list:
         ipversion = ipaddress.ip_address(neighbor_address).version
+        maximum_prefix = -1  # 定义一下避免出现未引用错误，实际上不可能发生
+        maximum_prefix_out = -1
         if neighbor_type in ["Peer", "Downstream"]:
             maximum_prefix = (
                 maximum_prefix_map[asn][0]
                 if ipversion == 4
                 else maximum_prefix_map[asn][1]
             )
-        if neighbor_type in ["Upstream", "RS", "Peer"]:
+        if neighbor_type in ["Upstream", "RouteServer", "Peer"]:
             maximum_prefix_out = (
                 maximum_prefix_map[local_asn][0]
                 if ipversion == 4
@@ -443,10 +445,12 @@ def get_bgp_neighbor_cmd(
         set protocols bgp neighbor {neighbor_address} solo
         set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
         {f"set protocols bgp neighbor {neighbor_address} shutdown" if neighbor_type in ["Peer", "Downstream"] and maximum_prefix==0 else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RS", "Peer"] else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if (neighbor_type=="ibgp" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if (neighbor_type=="IBGP" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
         {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
         """
@@ -454,54 +458,25 @@ def get_bgp_neighbor_cmd(
     return bgp_cmd
 
 
-def get_vyos_protocol_bgp_ibgp(neighbor, neighbor_id):
-    """cmd to configure vyos protocol bgp ibgp"""
-    neighbor_type = "ibgp"
+def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor, neighbor_id):
+    """cmd to configure vyos protocol bgp"""
 
-    asn = local_asn
-    route_map_in_name = f"IBGP-IN-{neighbor_id}"
-    route_map_out_name = f"IBGP-OUT-{neighbor_id}"
+    if neighbor_type == "IBGP":
+        asn = local_asn
+    else:
+        asn = neighbor["asn"]
 
-    final_filter = f"""
-    delete policy route-map {route_map_in_name}
-    set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call IBGP-IN
-    set policy route-map {route_map_in_name} rule 10 on-match next
-    set policy route-map {route_map_in_name} rule 200 action permit
-    set policy route-map {route_map_in_name} rule 200 on-match next
-    set policy route-map {route_map_in_name} rule 1000 action permit
-    
-    delete policy route-map {route_map_out_name}
-    set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call IBGP-OUT
-    set policy route-map {route_map_out_name} rule 10 on-match next
-    set policy route-map {route_map_out_name} rule 200 action permit
-    set policy route-map {route_map_out_name} rule 200 on-match next
-    set policy route-map {route_map_out_name} rule 1000 action permit
-    """
-
-    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
-    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
-
-    bgp_cmd = get_bgp_neighbor_cmd(
-        neighbor, neighbor_type, route_map_in_name, route_map_out_name
-    )
-
-    return final_filter + bgp_cmd
-
-
-def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
-    """cmd to configure vyos protocol bgp upstream"""
-    neighbor_type = "Upstream"
-
-    asn = neighbor["asn"]
-    route_map_in_name = f"AS{asn}-UPSTREAM-IN-{neighbor_id}"
-    route_map_out_name = f"AS{asn}-UPSTREAM-OUT-{neighbor_id}"
+    if neighbor_type == "IBGP":
+        route_map_in_name = f"IBGP-IN-{neighbor_id}"
+        route_map_out_name = f"IBGP-OUT-{neighbor_id}"
+    else:
+        route_map_in_name = f"AS{asn}-{neighbor_type.upper()}-IN-{neighbor_id}"
+        route_map_out_name = f"AS{asn}-{neighbor_type.upper()}-OUT-{neighbor_id}"
 
     final_filter = f"""
     delete policy route-map {route_map_in_name}
     set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call UPSTREAM-IN
+    set policy route-map {route_map_in_name} rule 10 call {neighbor_type.upper()}-IN
     set policy route-map {route_map_in_name} rule 10 on-match next
     set policy route-map {route_map_in_name} rule 200 action permit
     set policy route-map {route_map_in_name} rule 200 on-match next
@@ -509,121 +484,7 @@ def get_vyos_protocol_bgp_upstream(neighbor, neighbor_id):
 
     delete policy route-map {route_map_out_name}
     set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call UPSTREAM-OUT
-    set policy route-map {route_map_out_name} rule 10 on-match next
-    set policy route-map {route_map_out_name} rule 200 action permit
-    set policy route-map {route_map_out_name} rule 200 on-match next
-    set policy route-map {route_map_out_name} rule 1000 action permit
-    """
-
-    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
-    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
-
-    bgp_cmd = get_bgp_neighbor_cmd(
-        neighbor, neighbor_type, route_map_in_name, route_map_out_name
-    )
-
-    return final_filter + bgp_cmd
-
-
-def get_vyos_protocol_bgp_routeserver(neighbor, neighbor_id):
-    """cmd to configure vyos protocol bgp routeserver"""
-    neighbor_type = "RS"
-
-    asn = neighbor["asn"]
-    route_map_in_name = f"AS{asn}-ROUTESERVER-IN-{neighbor_id}"
-    route_map_out_name = f"AS{asn}-ROUTESERVER-OUT-{neighbor_id}"
-
-    final_filter = f"""
-    delete policy route-map {route_map_in_name}
-    set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call ROUTESERVER-IN
-    set policy route-map {route_map_in_name} rule 10 on-match next
-    set policy route-map {route_map_in_name} rule 200 action permit
-    set policy route-map {route_map_in_name} rule 200 on-match next
-    set policy route-map {route_map_in_name} rule 1000 action permit
-
-    delete policy route-map {route_map_out_name}
-    set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call ROUTESERVER-OUT
-    set policy route-map {route_map_out_name} rule 10 on-match next
-    set policy route-map {route_map_out_name} rule 200 action permit
-    set policy route-map {route_map_out_name} rule 200 on-match next
-    set policy route-map {route_map_out_name} rule 1000 action permit
-    """
-
-    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
-    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
-
-    bgp_cmd = get_bgp_neighbor_cmd(
-        neighbor, neighbor_type, route_map_in_name, route_map_out_name
-    )
-
-    return final_filter + bgp_cmd
-
-
-def get_vyos_protocol_bgp_peer(neighbor, neighbor_id):
-    """cmd to configure vyos protocol bgp peer"""
-    neighbor_type = "Peer"
-
-    asn = neighbor["asn"]
-    route_map_in_name = f"AS{asn}-PEER-IN-{neighbor_id}"
-    route_map_out_name = f"AS{asn}-PEER-OUT-{neighbor_id}"
-
-    final_filter = f"""
-    delete policy route-map {route_map_in_name}
-    set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call PEER-IN
-    set policy route-map {route_map_in_name} rule 10 on-match next
-    set policy route-map {route_map_in_name} rule 20 action permit
-    set policy route-map {route_map_in_name} rule 20 call FILTER-AS{asn}-IN
-    set policy route-map {route_map_in_name} rule 20 on-match next
-    set policy route-map {route_map_in_name} rule 200 action permit
-    set policy route-map {route_map_in_name} rule 200 on-match next
-    set policy route-map {route_map_in_name} rule 1000 action permit
-
-    delete policy route-map {route_map_out_name}
-    set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call PEER-OUT
-    set policy route-map {route_map_out_name} rule 10 on-match next
-    set policy route-map {route_map_out_name} rule 200 action permit
-    set policy route-map {route_map_out_name} rule 200 on-match next
-    set policy route-map {route_map_out_name} rule 1000 action permit
-    """
-
-    final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
-    final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
-
-    bgp_cmd = get_bgp_neighbor_cmd(
-        neighbor, neighbor_type, route_map_in_name, route_map_out_name
-    )
-
-    return final_filter + bgp_cmd
-
-
-def get_vyos_protocol_bgp_downstream(neighbor, neighbor_id):
-    """cmd to configure vyos protocol bgp downstream"""
-    neighbor_type = "Downstream"
-
-    asn = neighbor["asn"]
-    route_map_in_name = f"AS{asn}-DOWNSTREAM-IN-{neighbor_id}"
-    route_map_out_name = f"AS{asn}-DOWNSTREAM-OUT-{neighbor_id}"
-
-    final_filter = f"""
-    delete policy route-map {route_map_in_name}
-    set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call DOWNSTREAM-IN
-    set policy route-map {route_map_in_name} rule 10 on-match next
-    set policy route-map {route_map_in_name} rule 20 action permit
-    set policy route-map {route_map_in_name} rule 20 call FILTER-AS{asn}-IN
-    set policy route-map {route_map_in_name} rule 20 on-match next
-    set policy route-map {route_map_in_name} rule 200 action permit
-    set policy route-map {route_map_in_name} rule 200 on-match next
-    set policy route-map {route_map_in_name} rule 1000 action permit
-
-    delete policy route-map {route_map_out_name}
-    set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call DOWNSTREAM-OUT
+    set policy route-map {route_map_out_name} rule 10 call {neighbor_type.upper()}-OUT
     set policy route-map {route_map_out_name} rule 10 on-match next
     set policy route-map {route_map_out_name} rule 200 action permit
     set policy route-map {route_map_out_name} rule 200 on-match next
@@ -660,7 +521,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
         if "manual" in ibgp_neighbor and ibgp_neighbor["manual"]:
             continue
         nid = bgp_config["ibgp"].index(ibgp_neighbor)
-        cmd += get_vyos_protocol_bgp_ibgp(ibgp_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("IBGP", ibgp_neighbor, nid)
     for upstream_neighbor in bgp_config["upstream"]:
         if "manual" in upstream_neighbor and upstream_neighbor["manual"]:
             continue
@@ -668,7 +529,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
             n for n in bgp_config["upstream"] if n["asn"] == upstream_neighbor["asn"]
         ]
         nid = this_asn_neighbor_list.index(upstream_neighbor)
-        cmd += get_vyos_protocol_bgp_upstream(upstream_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Upstream", upstream_neighbor, nid)
     for routeserver_neighbor in bgp_config["routeserver"]:
         if "manual" in routeserver_neighbor and routeserver_neighbor["manual"]:
             continue
@@ -678,7 +539,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
             if n["asn"] == routeserver_neighbor["asn"]
         ]
         nid = this_asn_neighbor_list.index(routeserver_neighbor)
-        cmd += get_vyos_protocol_bgp_routeserver(routeserver_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("RouteServer", routeserver_neighbor, nid)
     for peer_neighbor in bgp_config["peer"]:
         if "manual" in peer_neighbor and peer_neighbor["manual"]:
             continue
@@ -686,7 +547,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
             n for n in bgp_config["peer"] if n["asn"] == peer_neighbor["asn"]
         ]
         nid = this_asn_neighbor_list.index(peer_neighbor)
-        cmd += get_vyos_protocol_bgp_peer(peer_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Peer", peer_neighbor, nid)
     for downstream_neighbor in bgp_config["downstream"]:
         if "manual" in downstream_neighbor and downstream_neighbor["manual"]:
             continue
@@ -696,7 +557,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
             if n["asn"] == downstream_neighbor["asn"]
         ]
         nid = this_asn_neighbor_list.index(downstream_neighbor)
-        cmd += get_vyos_protocol_bgp_downstream(downstream_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Downstream", downstream_neighbor, nid)
 
     return cmd
 
