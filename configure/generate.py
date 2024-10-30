@@ -60,6 +60,9 @@ def get_router_id(router_name):
 def get_as_info(asn):
     """use peeringdb to get as info"""
 
+    if asn in as_name_map:
+        return
+
     time.sleep(5)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
     print(f"getting AS{asn} info...")
@@ -795,4 +798,4 @@ if __name__ == "__main__":
                 f.write(script)
             print(f"configure.{router['name']}.sh generated.")
         except Exception as e:
-            print(e)
+            print(f"generate configure.{router['name']}.sh failed: ", e)
