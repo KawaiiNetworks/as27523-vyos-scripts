@@ -57,7 +57,8 @@ def get_neighbor_id(neighbor):
         neighbor_address_list = [neighbor_address_list]
     neighbor_str = (
         str(neighbor["asn"])
-        + "".join(sorted(neighbor_address_list))
+        if "asn" in neighbor
+        else "" + "".join(sorted(neighbor_address_list))
         # + str(neighbor["update-source"])
     )
     hash_object = hashlib.sha256(neighbor_str.encode("utf-8"))
