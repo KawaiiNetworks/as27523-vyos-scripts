@@ -8,6 +8,7 @@ import yaml
 import time
 import re
 import dns.resolver
+import hashlib
 
 work_dir = os.path.dirname(os.path.abspath(__file__))
 github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
@@ -45,6 +46,28 @@ prefix_matrix_map = {}
 
 cone_prefix_matrix_map = {}
 """(ipversion, as):[(network, length, ge, le, object_mask, invert_mask)]"""
+
+
+neighbor_id_hashmap = {}
+
+
+def get_neighbor_id(neighbor):
+    neighbor_address_list = neighbor["neighbor-address"]
+    if not isinstance(neighbor_address_list, list):
+        neighbor_address_list = [neighbor_address_list]
+    neighbor_str = (
+        str(neighbor["asn"])
+        + "".join(sorted(neighbor_address_list))
+        # + str(neighbor["update-source"])
+    )
+    hash_object = hashlib.sha256(neighbor_str.encode("utf-8"))
+    hash_hex = hash_object.hexdigest()
+    res = 1 + int(hash_hex, 16) % (2**16)  # 1-65536
+    if res in neighbor_id_hashmap and neighbor_id_hashmap[res] != neighbor_str:
+        raise ValueError("hash collision")
+    else:
+        neighbor_id_hashmap[res] = neighbor_str
+    return res
 
 
 def get_router_id(router_name):
@@ -91,6 +114,16 @@ def get_as_info(asn):
 
     asset_name_map[asn] = as_set_name_list
     print(f"AS{asn} as-set name: {as_set_name_list}")
+
+
+def get_vyos_as_community(asn):
+    """get vyos as community cmd"""
+
+    return f"""
+    delete policy large-community-list DNA-AS{asn}
+    set policy large-community-list DNA-AS{asn} rule 10 action 'permit'
+    set policy large-community-list DNA-AS{asn} rule 10 regex "{local_asn}:1000:{asn}"
+    """
 
 
 def get_asset_name(asn):
@@ -308,16 +341,6 @@ def get_vyos_as_filter(asn):
     full_vyos_cmd += get_vyos_as_path(asn)
     full_vyos_cmd += get_vyos_prefix_list(4, asn, cone=True)
     full_vyos_cmd += get_vyos_prefix_list(6, asn, cone=True)
-    # full_vyos_cmd += f"""
-    # delete policy route-map FILTER-AS{asn}-IN
-    # set policy route-map FILTER-AS{asn}-IN rule 10 action permit
-    # set policy route-map FILTER-AS{asn}-IN rule 10 match as-path AS{asn}-IN
-    # set policy route-map FILTER-AS{asn}-IN rule 10 on-match next
-    # set policy route-map FILTER-AS{asn}-IN rule 20 action permit
-    # set policy route-map FILTER-AS{asn}-IN rule 20 match ip address prefix-list AS{asn}-CONE
-    # set policy route-map FILTER-AS{asn}-IN rule 30 action permit
-    # set policy route-map FILTER-AS{asn}-IN rule 30 match ipv6 address prefix-list AS{asn}-CONE
-    # """
 
     return full_vyos_cmd
 
@@ -341,16 +364,16 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
     f = ""
     if "local-pref" in neighbor:
         f += f"""
-        set policy route-map {route_map_in_name} rule 200 set local-preference '{neighbor["local-pref"]}'
+        set policy route-map {route_map_in_name} rule 100 set local-preference '{neighbor["local-pref"]}'
         """
     if "metric" in neighbor:
         f += f"""
-        set policy route-map {route_map_in_name} rule 200 set metric {neighbor["metric"]}
+        set policy route-map {route_map_in_name} rule 100 set metric {neighbor["metric"]}
         """
 
-    if "post-import-accept" in neighbor:
-        r = 201
-        for c in neighbor["post-import-accept"]:
+    if "pre-import-accept" in neighbor:
+        r = 1000
+        for c in neighbor["pre-import-accept"]:
             f += f"""
             set policy route-map {route_map_in_name} rule {r} action {c["action"]}
             set policy route-map {route_map_in_name} rule {r} match {c["match"]}
@@ -376,12 +399,12 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
     f = ""
     if "prepend" in neighbor:
         f += f"""
-        set policy route-map {route_map_out_name} rule 200 set as-path prepend '{neighbor["prepend"]}'
+        set policy route-map {route_map_out_name} rule 100 set as-path prepend '{neighbor["prepend"]}'
         """
 
-    if "post-export-accept" in neighbor:
-        r = 201
-        for c in neighbor["post-export-accept"]:
+    if "pre-export-accept" in neighbor:
+        r = 1000
+        for c in neighbor["pre-export-accept"]:
             f += f"""
             set policy route-map {route_map_out_name} rule {r} action {c["action"]}
             set policy route-map {route_map_out_name} rule {r} match {c["match"]}
@@ -460,8 +483,10 @@ def get_bgp_neighbor_cmd(
     return bgp_cmd
 
 
-def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor, neighbor_id):
+def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     """cmd to configure vyos protocol bgp"""
+
+    neighbor_id = get_neighbor_id(neighbor)
 
     if neighbor_type == "IBGP":
         asn = local_asn
@@ -480,17 +505,37 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor, neighbor_id):
     set policy route-map {route_map_in_name} rule 10 action permit
     set policy route-map {route_map_in_name} rule 10 call {neighbor_type.upper()}-IN
     set policy route-map {route_map_in_name} rule 10 on-match next
+    # rule 100 for setting attribute like local-pref, metric
+    set policy route-map {route_map_in_name} rule 100 action permit
+    set policy route-map {route_map_in_name} rule 100 on-match next
+    # rule 200-999 for this code
     set policy route-map {route_map_in_name} rule 200 action permit
+    {f"set policy route-map {route_map_in_name} rule 200 set large-community add {local_asn}:10000:{asn}" if neighbor_type!="IBGP" else ""}
+    set policy route-map {route_map_in_name} rule 200 set large-community add {local_asn}:10001:{neighbor_id}
     set policy route-map {route_map_in_name} rule 200 on-match next
-    set policy route-map {route_map_in_name} rule 1000 action permit
+    # rule 1000-9999 for pre-import-accept in config
+    set policy route-map {route_map_in_name} rule 10000 action permit
 
     delete policy route-map {route_map_out_name}
     set policy route-map {route_map_out_name} rule 10 action permit
     set policy route-map {route_map_out_name} rule 10 call {neighbor_type.upper()}-OUT
     set policy route-map {route_map_out_name} rule 10 on-match next
-    set policy route-map {route_map_out_name} rule 200 action permit
-    set policy route-map {route_map_out_name} rule 200 on-match next
-    set policy route-map {route_map_out_name} rule 1000 action permit
+    # rule 100 for controling like prepend
+    set policy route-map {route_map_out_name} rule 100 action permit
+    set policy route-map {route_map_out_name} rule 100 on-match next
+    # rule 200-999 for this code
+    set policy route-map {route_map_out_name} rule 200 action deny
+    set policy route-map {route_map_out_name} rule 200 match large-community large-community-list DNA-AS{asn}
+    set policy route-map {route_map_out_name} rule 201 action deny
+    set policy route-map {route_map_out_name} rule 201 match large-community large-community-list DNA-NID{neighbor_id}
+    set policy route-map {route_map_out_name} rule 202 action deny
+    set policy route-map {route_map_out_name} rule 202 match large-community large-community-list DNA-ANY
+    # rule 1000-9999 for pre-export-accept in config
+    set policy route-map {route_map_out_name} rule 10000 action permit
+
+    delete policy large-community-list DNA-NID{neighbor_id}
+    set policy large-community-list DNA-NID{neighbor_id} rule 10 action 'permit'
+    set policy large-community-list DNA-NID{neighbor_id} rule 10 regex "{local_asn}:1001:{neighbor_id}"
     """
 
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
@@ -522,44 +567,23 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     for ibgp_neighbor in bgp_config["ibgp"]:
         if "manual" in ibgp_neighbor and ibgp_neighbor["manual"]:
             continue
-        nid = bgp_config["ibgp"].index(ibgp_neighbor)
-        cmd += get_vyos_protocol_bgp_neighbor("IBGP", ibgp_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("IBGP", ibgp_neighbor)
     for upstream_neighbor in bgp_config["upstream"]:
         if "manual" in upstream_neighbor and upstream_neighbor["manual"]:
             continue
-        this_asn_neighbor_list = [
-            n for n in bgp_config["upstream"] if n["asn"] == upstream_neighbor["asn"]
-        ]
-        nid = this_asn_neighbor_list.index(upstream_neighbor)
-        cmd += get_vyos_protocol_bgp_neighbor("Upstream", upstream_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Upstream", upstream_neighbor)
     for routeserver_neighbor in bgp_config["routeserver"]:
         if "manual" in routeserver_neighbor and routeserver_neighbor["manual"]:
             continue
-        this_asn_neighbor_list = [
-            n
-            for n in bgp_config["routeserver"]
-            if n["asn"] == routeserver_neighbor["asn"]
-        ]
-        nid = this_asn_neighbor_list.index(routeserver_neighbor)
-        cmd += get_vyos_protocol_bgp_neighbor("RouteServer", routeserver_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("RouteServer", routeserver_neighbor)
     for peer_neighbor in bgp_config["peer"]:
         if "manual" in peer_neighbor and peer_neighbor["manual"]:
             continue
-        this_asn_neighbor_list = [
-            n for n in bgp_config["peer"] if n["asn"] == peer_neighbor["asn"]
-        ]
-        nid = this_asn_neighbor_list.index(peer_neighbor)
-        cmd += get_vyos_protocol_bgp_neighbor("Peer", peer_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Peer", peer_neighbor)
     for downstream_neighbor in bgp_config["downstream"]:
         if "manual" in downstream_neighbor and downstream_neighbor["manual"]:
             continue
-        this_asn_neighbor_list = [
-            n
-            for n in bgp_config["downstream"]
-            if n["asn"] == downstream_neighbor["asn"]
-        ]
-        nid = this_asn_neighbor_list.index(downstream_neighbor)
-        cmd += get_vyos_protocol_bgp_neighbor("Downstream", downstream_neighbor, nid)
+        cmd += get_vyos_protocol_bgp_neighbor("Downstream", downstream_neighbor)
 
     return cmd
 
@@ -689,6 +713,7 @@ def get_final_vyos_cmd(router_config):
     get_as_info(local_asn)
     for asn in connected_asns:
         get_as_info(asn)
+        configure += get_vyos_as_community(asn)
 
     # local asn prefix list
     configure += get_vyos_prefix_list(
@@ -797,5 +822,11 @@ if __name__ == "__main__":
             ) as f:
                 f.write(script)
             print(f"configure.{router['name']}.sh generated.")
+        except ValueError as e:
+            if str(e) == "hash collision":
+                print(f"generate configure.{router['name']}.sh failed: ", e)
+                break
+            else:
+                print(f"generate configure.{router['name']}.sh failed: ", e)
         except Exception as e:
             print(f"generate configure.{router['name']}.sh failed: ", e)

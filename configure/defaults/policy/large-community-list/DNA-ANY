@@ -1,0 +1,5 @@
+delete policy large-community-list DNA-ANY
+set policy large-community-list DNA-ANY rule 10 action 'permit'
+set policy large-community-list DNA-ANY rule 10 regex "${ASN}:1000:0"
+set policy large-community-list DNA-ANY rule 20 action 'permit'
+set policy large-community-list DNA-ANY rule 20 regex "${ASN}:1001:0"
