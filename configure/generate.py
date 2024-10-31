@@ -813,20 +813,20 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(work_dir, "outputs"))
 
     for router in router_list:
-        try:
-            script = get_final_vyos_cmd(router)
-            with open(
-                os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
-                "w",
-                encoding="utf-8",
-            ) as f:
-                f.write(script)
-            print(f"configure.{router['name']}.sh generated.")
-        except ValueError as e:
-            if str(e) == "hash collision":
-                print(f"generate configure.{router['name']}.sh failed: ", e)
-                break
-            else:
-                print(f"generate configure.{router['name']}.sh failed: ", e)
-        except Exception as e:
-            print(f"generate configure.{router['name']}.sh failed: ", e)
+        # try:
+        script = get_final_vyos_cmd(router)
+        with open(
+            os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write(script)
+        print(f"configure.{router['name']}.sh generated.")
+        # except ValueError as e:
+        #     if str(e) == "hash collision":
+        #         print(f"generate configure.{router['name']}.sh failed: ", e)
+        #         break
+        #     else:
+        #         print(f"generate configure.{router['name']}.sh failed: ", e)
+        # except Exception as e:
+        #     print(f"generate configure.{router['name']}.sh failed: ", e)
