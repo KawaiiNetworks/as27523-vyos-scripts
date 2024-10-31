@@ -1,4 +1,4 @@
-delete policy route-map DOWNSTREAM-IN
+delete policy route-map AUTOGEN-DOWNSTREAM-IN
 set policy route-map AUTOGEN-DOWNSTREAM-IN rule 10 action 'permit'
 set policy route-map AUTOGEN-DOWNSTREAM-IN rule 10 call 'AUTOGEN-FILTER-EBGP'
 set policy route-map AUTOGEN-DOWNSTREAM-IN rule 10 on-match next
