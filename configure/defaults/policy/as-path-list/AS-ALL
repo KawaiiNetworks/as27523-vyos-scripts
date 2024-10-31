@@ -1,3 +1,0 @@
-delete policy as-path-list AS-ALL
-set policy as-path-list AS-ALL rule 10 action 'permit'
-set policy as-path-list AS-ALL rule 10 regex '.*'

@@ -1,0 +1,2 @@
+delete policy route-map AUTOGEN-REJECT-ALL
+set policy route-map AUTOGEN-REJECT-ALL rule 10 action 'deny'

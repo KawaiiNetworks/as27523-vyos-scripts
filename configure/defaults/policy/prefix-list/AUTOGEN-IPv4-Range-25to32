@@ -1,0 +1,6 @@
+delete policy prefix-list AUTOGEN-IPv4-Range-25to32
+set policy prefix-list AUTOGEN-IPv4-Range-25to32 rule 10 action 'permit'
+set policy prefix-list AUTOGEN-IPv4-Range-25to32 rule 10 description 'Match IPv4 block smaller than /24'
+set policy prefix-list AUTOGEN-IPv4-Range-25to32 rule 10 ge '25'
+set policy prefix-list AUTOGEN-IPv4-Range-25to32 rule 10 le '32'
+set policy prefix-list AUTOGEN-IPv4-Range-25to32 rule 10 prefix '0.0.0.0/0'

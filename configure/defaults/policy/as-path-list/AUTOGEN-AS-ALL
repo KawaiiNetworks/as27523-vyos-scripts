@@ -1,0 +1,3 @@
+delete policy as-path-list AUTOGEN-AS-ALL
+set policy as-path-list AUTOGEN-AS-ALL rule 10 action 'permit'
+set policy as-path-list AUTOGEN-AS-ALL rule 10 regex '.*'

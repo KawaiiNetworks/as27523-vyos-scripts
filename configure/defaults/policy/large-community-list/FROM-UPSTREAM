@@ -1,3 +1,0 @@
-delete policy large-community-list FROM-UPSTREAM
-set policy large-community-list FROM-UPSTREAM rule 10 action 'permit'
-set policy large-community-list FROM-UPSTREAM rule 10 regex "${ASN}:0:200"

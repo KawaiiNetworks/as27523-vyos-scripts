@@ -1,6 +1,0 @@
-delete policy prefix-list IPv4-Range-0to7
-set policy prefix-list IPv4-Range-0to7 rule 10 action 'permit'
-set policy prefix-list IPv4-Range-0to7 rule 10 description 'Match IPv4 block bigger than /8'
-set policy prefix-list IPv4-Range-0to7 rule 10 ge '0'
-set policy prefix-list IPv4-Range-0to7 rule 10 le '7'
-set policy prefix-list IPv4-Range-0to7 rule 10 prefix '0.0.0.0/0'

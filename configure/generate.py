@@ -121,9 +121,9 @@ def get_vyos_as_community(asn):
     """get vyos as community cmd"""
 
     return f"""
-    delete policy large-community-list DNA-AS{asn}
-    set policy large-community-list DNA-AS{asn} rule 10 action 'permit'
-    set policy large-community-list DNA-AS{asn} rule 10 regex "{local_asn}:1000:{asn}"
+    delete policy large-community-list AUTOGEN-DNA-AS{asn}
+    set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 action 'permit'
+    set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 regex "{local_asn}:1000:{asn}"
     """
 
 
@@ -222,9 +222,9 @@ def get_vyos_as_path(asn):
     """use bgpq4 to get as-path filter"""
 
     full_vyos_cmd = f"""
-    delete policy as-path-list AS{asn}-IN
-    set policy as-path-list AS{asn}-IN rule 10 action permit
-    set policy as-path-list AS{asn}-IN rule 10 regex '^{asn}(_{asn})*$'
+    delete policy as-path-list AUTOGEN-AS{asn}-IN
+    set policy as-path-list AUTOGEN-AS{asn}-IN rule 10 action permit
+    set policy as-path-list AUTOGEN-AS{asn}-IN rule 10 regex '^{asn}(_{asn})*$'
     """
 
     cone_list = get_as_set_member(asn)
@@ -235,8 +235,8 @@ def get_vyos_as_path(asn):
     if len(cone_list) + 1 > config["as-set"]["member-limit"]:
         if config["as-set"]["limit-violation"] == "accept":
             full_vyos_cmd += f"""
-            set policy as-path-list AS{asn}-IN rule 20 action permit
-            set policy as-path-list AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
             """
             print(
                 f"Warn: AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will accept all as-path."
@@ -244,8 +244,8 @@ def get_vyos_as_path(asn):
             return full_vyos_cmd
         elif config["as-set"]["limit-violation"] == "deny":
             full_vyos_cmd += f"""
-            set policy as-path-list AS{asn}-IN rule 20 action deny
-            set policy as-path-list AS{asn}-IN rule 20 regex '.*'
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action deny
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '.*'
             """
             print(
                 f"Warn: AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will deny all as-path except {asn}."
@@ -256,8 +256,8 @@ def get_vyos_as_path(asn):
 
     if len(cone_list) > 0:
         full_vyos_cmd += f"""
-        set policy as-path-list AS{asn}-IN rule 20 action permit
-        set policy as-path-list AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*_({"|".join(cone_list)})$'
+        set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
+        set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*_({"|".join(cone_list)})$'
         """
     print(f"AS{asn} as-path filter generated.")
     return full_vyos_cmd
@@ -298,9 +298,9 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
             raise ValueError("as-set limit-violation must be accept, deny")
 
     if cone:
-        fn = filter_name if filter_name else f"AS{asn}-CONE"
+        fn = filter_name if filter_name else f"AUTOGEN-AS{asn}-CONE"
     else:
-        fn = filter_name if filter_name else f"AS{asn}"
+        fn = filter_name if filter_name else f"AUTOGEN-AS{asn}"
 
     if ipversion == 4:
         pl = "prefix-list"
@@ -471,12 +471,12 @@ def get_bgp_neighbor_cmd(
         set protocols bgp neighbor {neighbor_address} solo
         set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
         {f"set protocols bgp neighbor {neighbor_address} shutdown" if neighbor_type in ["Peer", "Downstream"] and maximum_prefix==0 else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"SIMPLE-IBGP-OUT" if (neighbor_type=="IBGP" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"AUTOGEN-SIMPLE-IBGP-OUT" if (neighbor_type=="IBGP" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
         {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
         """
@@ -495,11 +495,13 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
         asn = neighbor["asn"]
 
     if neighbor_type == "IBGP":
-        route_map_in_name = f"IBGP-IN-{neighbor_id}"
-        route_map_out_name = f"IBGP-OUT-{neighbor_id}"
+        route_map_in_name = f"AUTOGEN-IBGP-IN-{neighbor_id}"
+        route_map_out_name = f"AUTOGEN-IBGP-OUT-{neighbor_id}"
     else:
-        route_map_in_name = f"AS{asn}-{neighbor_type.upper()}-IN-{neighbor_id}"
-        route_map_out_name = f"AS{asn}-{neighbor_type.upper()}-OUT-{neighbor_id}"
+        route_map_in_name = f"AUTOGEN-AS{asn}-{neighbor_type.upper()}-IN-{neighbor_id}"
+        route_map_out_name = (
+            f"AUTOGEN-AS{asn}-{neighbor_type.upper()}-OUT-{neighbor_id}"
+        )
 
     final_filter = f"""
     delete policy route-map {route_map_in_name}
@@ -526,17 +528,17 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     set policy route-map {route_map_out_name} rule 100 on-match next
     # rule 200-999 for this code
     set policy route-map {route_map_out_name} rule 200 action deny
-    set policy route-map {route_map_out_name} rule 200 match large-community large-community-list DNA-AS{asn}
+    set policy route-map {route_map_out_name} rule 200 match large-community large-community-list AUTOGEN-DNA-AS{asn}
     set policy route-map {route_map_out_name} rule 201 action deny
-    set policy route-map {route_map_out_name} rule 201 match large-community large-community-list DNA-NID{neighbor_id}
+    set policy route-map {route_map_out_name} rule 201 match large-community large-community-list AUTOGEN-DNA-NID{neighbor_id}
     set policy route-map {route_map_out_name} rule 202 action deny
-    set policy route-map {route_map_out_name} rule 202 match large-community large-community-list DNA-ANY
+    set policy route-map {route_map_out_name} rule 202 match large-community large-community-list AUTOGEN-DNA-ANY
     # rule 1000-9999 for pre-export-accept in config
     set policy route-map {route_map_out_name} rule 10000 action permit
 
-    delete policy large-community-list DNA-NID{neighbor_id}
-    set policy large-community-list DNA-NID{neighbor_id} rule 10 action 'permit'
-    set policy large-community-list DNA-NID{neighbor_id} rule 10 regex "{local_asn}:1001:{neighbor_id}"
+    delete policy large-community-list AUTOGEN-DNA-NID{neighbor_id}
+    set policy large-community-list AUTOGEN-DNA-NID{neighbor_id} rule 10 action 'permit'
+    set policy large-community-list AUTOGEN-DNA-NID{neighbor_id} rule 10 regex "{local_asn}:1001:{neighbor_id}"
     """
 
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
@@ -591,25 +593,25 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
 
 def get_vyos_set_src(router_config):
     cmd = """
-    delete policy route-map SET-SRC
-    set policy route-map SET-SRC rule 10 action 'permit'
-    set policy route-map SET-SRC rule 10 match ip address prefix-list 'IPv4-ALL'
-    set policy route-map SET-SRC rule 20 action 'permit'
-    set policy route-map SET-SRC rule 20 match ipv6 address prefix-list 'IPv6-ALL'
+    delete policy route-map AUTOGEN-SET-SRC
+    set policy route-map AUTOGEN-SET-SRC rule 10 action 'permit'
+    set policy route-map AUTOGEN-SET-SRC rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
+    set policy route-map AUTOGEN-SET-SRC rule 20 action 'permit'
+    set policy route-map AUTOGEN-SET-SRC rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
     """
 
     if "src" in router_config:
         if "ipv4" in router_config["src"]:
             cmd += f"""
-            set policy route-map SET-SRC rule 10 set src '{router_config["src"]["ipv4"]}'
+            set policy route-map AUTOGEN-SET-SRC rule 10 set src '{router_config["src"]["ipv4"]}'
             delete system ip protocol bgp
-            set system ip protocol bgp route-map SET-SRC
+            set system ip protocol bgp route-map AUTOGEN-SET-SRC
             """
         if "ipv6" in router_config["src"]:
             cmd += f"""
-            set policy route-map SET-SRC rule 20 set src '{router_config["src"]["ipv6"]}'
+            set policy route-map AUTOGEN-SET-SRC rule 20 set src '{router_config["src"]["ipv6"]}'
             delete system ipv6 protocol bgp
-            set system ipv6 protocol bgp route-map SET-SRC
+            set system ipv6 protocol bgp route-map AUTOGEN-SET-SRC
             """
 
     return cmd
@@ -718,18 +720,22 @@ def get_final_vyos_cmd(router_config):
 
     # local asn prefix list
     configure += get_vyos_prefix_list(
-        4, local_asn, filter_name="LOCAL-ASN-CONE", cone=True
+        4, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
     )
     configure += get_vyos_prefix_list(
-        6, local_asn, filter_name="LOCAL-ASN-CONE", cone=True
-    )
-    configure += get_vyos_prefix_list(4, local_asn, filter_name="LOCAL-ASN-PREFIX4")
-    configure += get_vyos_prefix_list(6, local_asn, filter_name="LOCAL-ASN-PREFIX6")
-    configure += get_vyos_prefix_list(
-        4, local_asn, max_length=32, filter_name="LOCAL-ASN-PREFIX4-le32"
+        6, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
     )
     configure += get_vyos_prefix_list(
-        6, local_asn, max_length=128, filter_name="LOCAL-ASN-PREFIX6-le128"
+        4, local_asn, filter_name="AUTOGEN-LOCAL-ASN-PREFIX4"
+    )
+    configure += get_vyos_prefix_list(
+        6, local_asn, filter_name="AUTOGEN-LOCAL-ASN-PREFIX6"
+    )
+    configure += get_vyos_prefix_list(
+        4, local_asn, max_length=32, filter_name="AUTOGEN-LOCAL-ASN-PREFIX4-le32"
+    )
+    configure += get_vyos_prefix_list(
+        6, local_asn, max_length=128, filter_name="AUTOGEN-LOCAL-ASN-PREFIX6-le128"
     )
 
     # we only need to generate filter for peer and downstream

@@ -1,0 +1,3 @@
+delete policy large-community-list AUTOGEN-FROM-ROUTESERVER
+set policy large-community-list AUTOGEN-FROM-ROUTESERVER rule 10 action 'permit'
+set policy large-community-list AUTOGEN-FROM-ROUTESERVER rule 10 regex "${ASN}:0:300"

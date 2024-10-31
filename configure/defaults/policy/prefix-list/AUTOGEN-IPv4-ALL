@@ -1,0 +1,5 @@
+delete policy prefix-list AUTOGEN-IPv4-ALL
+set policy prefix-list AUTOGEN-IPv4-ALL rule 10 action 'permit'
+set policy prefix-list AUTOGEN-IPv4-ALL rule 10 ge '0'
+set policy prefix-list AUTOGEN-IPv4-ALL rule 10 le '32'
+set policy prefix-list AUTOGEN-IPv4-ALL rule 10 prefix '0.0.0.0/0'

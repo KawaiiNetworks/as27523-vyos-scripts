@@ -1,0 +1,6 @@
+delete policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4
+set policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4 rule 10 action 'permit'
+set policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4 rule 10 description 'ipv4 bogons with AP'
+set policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4 rule 10 ge '24'
+set policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4 rule 10 le '24'
+set policy prefix-list AUTOGEN-LOCAL-ALLOWED-PREFIX4 rule 10 prefix '192.168.0.0/16'

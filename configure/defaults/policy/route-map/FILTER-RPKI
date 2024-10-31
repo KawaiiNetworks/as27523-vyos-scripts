@@ -1,7 +1,0 @@
-delete policy route-map FILTER-RPKI
-set policy route-map FILTER-RPKI rule 10 action 'permit'
-set policy route-map FILTER-RPKI rule 10 match rpki 'valid'
-set policy route-map FILTER-RPKI rule 20 action 'permit'
-set policy route-map FILTER-RPKI rule 20 match rpki 'notfound'
-set policy route-map FILTER-RPKI rule 30 action 'deny'
-set policy route-map FILTER-RPKI rule 30 match rpki 'invalid'

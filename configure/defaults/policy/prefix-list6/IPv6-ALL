@@ -1,5 +1,0 @@
-delete policy prefix-list6 IPv6-ALL
-set policy prefix-list6 IPv6-ALL rule 10 action 'permit'
-set policy prefix-list6 IPv6-ALL rule 10 ge '0'
-set policy prefix-list6 IPv6-ALL rule 10 le '128'
-set policy prefix-list6 IPv6-ALL rule 10 prefix '::/0'
