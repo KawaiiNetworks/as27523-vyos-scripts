@@ -713,6 +713,9 @@ def get_final_vyos_cmd(router_config):
     connected_asns = upstream_asns + routeserver_asns + peer_asns + downstream_asns
     connected_asns = sorted(list(set(connected_asns)))
     get_as_info(local_asn)
+    configure += get_vyos_as_community(
+        local_asn
+    )  # 权宜之计，实际上ibgp不该能这样操控？
     for asn in connected_asns:
         get_as_info(asn)
         configure += get_vyos_as_community(asn)
