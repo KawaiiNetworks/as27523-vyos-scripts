@@ -56,9 +56,8 @@ def get_neighbor_id(neighbor):
     if not isinstance(neighbor_address_list, list):
         neighbor_address_list = [neighbor_address_list]
     neighbor_str = (
-        str(neighbor["asn"])
-        if "asn" in neighbor
-        else "" + "".join(sorted(neighbor_address_list))
+        (str(neighbor["asn"]) if "asn" in neighbor else "")  # ibgp没有asn
+        + "".join(sorted(neighbor_address_list))
         # + str(neighbor["update-source"])
     )
     hash_object = hashlib.sha256(neighbor_str.encode("utf-8"))
@@ -506,7 +505,7 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     final_filter = f"""
     delete policy route-map {route_map_in_name}
     set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call {neighbor_type.upper()}-IN
+    set policy route-map {route_map_in_name} rule 10 call AUTOGEN-{neighbor_type.upper()}-IN
     set policy route-map {route_map_in_name} rule 10 on-match next
     # rule 100 for setting attribute like local-pref, metric
     set policy route-map {route_map_in_name} rule 100 action permit
@@ -521,7 +520,7 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
 
     delete policy route-map {route_map_out_name}
     set policy route-map {route_map_out_name} rule 10 action permit
-    set policy route-map {route_map_out_name} rule 10 call {neighbor_type.upper()}-OUT
+    set policy route-map {route_map_out_name} rule 10 call AUTOGEN-{neighbor_type.upper()}-OUT
     set policy route-map {route_map_out_name} rule 10 on-match next
     # rule 100 for controling like prepend
     set policy route-map {route_map_out_name} rule 100 action permit
