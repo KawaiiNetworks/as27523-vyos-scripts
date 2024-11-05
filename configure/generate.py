@@ -870,12 +870,12 @@ def get_final_vyos_cmd(router_config):
     if "policy" in router_config:
         configure += get_vyos_policy(router_config["policy"])
 
+    # protocol bgp
+    configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
+
     # redistribute
     if "redistribute" in router_config:
         configure += get_vyos_route_map_redistribute(router_config["redistribute"])
-
-    # protocol bgp
-    configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)
 
     # system frr
     configure += get_vyos_system_frr()
