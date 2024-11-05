@@ -368,6 +368,7 @@ def get_vyos_policy(policy):
                 cmd += f"""
                 set policy prefix-list {p['name']} rule {n} action {r["action"]}
                 set policy prefix-list {p['name']} rule {n} prefix {r["prefix"]}
+                {f"set policy prefix-list {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
                 {f"set policy prefix-list {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
                 {f"set policy prefix-list {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
                 """
@@ -383,6 +384,7 @@ def get_vyos_policy(policy):
                 cmd += f"""
                 set policy prefix-list6 {p['name']} rule {n} action {r["action"]}
                 set policy prefix-list6 {p['name']} rule {n} prefix {r["prefix"]}
+                {f"set policy prefix-list6 {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
                 {f"set policy prefix-list6 {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
                 {f"set policy prefix-list6 {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
                 """
@@ -398,6 +400,7 @@ def get_vyos_policy(policy):
                 cmd += f"""
                 set policy as-path-list {p['name']} rule {n} action {r["action"]}
                 set policy as-path-list {p['name']} rule {n} regex {r["regex"]}
+                {f"set policy as-path-list {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
                 """
                 n += 1
 
@@ -415,7 +418,7 @@ def get_vyos_route_map_redistribute(redistribute):
     set protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
     set protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
     delete policy route-map AUTOGEN-Redistribute
-    set policy route-map AUTOGEN-Redistribute rule 10000 action permit"
+    set policy route-map AUTOGEN-Redistribute rule 10000 action permit
     """
 
     r = 1000
