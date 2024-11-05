@@ -87,7 +87,7 @@ def get_as_info(asn):
     if asn in as_name_map:
         return
 
-    time.sleep(5)
+    time.sleep(2)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
     print(f"getting AS{asn} info...")
     response = requests.get(url, timeout=10).json()["data"][0]
