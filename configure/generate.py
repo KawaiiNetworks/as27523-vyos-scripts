@@ -62,7 +62,8 @@ def get_neighbor_id(neighbor):
     )
     hash_object = hashlib.sha256(neighbor_str.encode("utf-8"))
     hash_hex = hash_object.hexdigest()
-    res = 1 + int(hash_hex, 16) % (2**16)  # 1-65536
+    # res = 1 + int(hash_hex, 16) % (2**16)  # 1-65536
+    res = 1 + int(hash_hex[-4:], 16)  # 1-65536
     if res in neighbor_id_hashmap and neighbor_id_hashmap[res] != neighbor_str:
         raise ValueError("hash collision")
     else:
@@ -123,6 +124,13 @@ def get_vyos_as_community(asn):
     delete policy large-community-list AUTOGEN-DNA-AS{asn}
     set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 action 'permit'
     set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 regex "{local_asn}:1000:{asn}"
+
+    delete policy large-community-list AUTOGEN-Prepend-1X-AS{asn}
+    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 action 'permit'
+    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 regex "{local_asn}:1011:{asn}"
+    delete policy large-community-list AUTOGEN-Prepend-2X-AS{asn}
+    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 action 'permit'
+    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 regex "{local_asn}:1012:{asn}"
     """
 
 
@@ -345,6 +353,91 @@ def get_vyos_as_filter(asn):
     return full_vyos_cmd
 
 
+def get_vyos_policy(policy):
+    """cmd to configure vyos policy"""
+
+    cmd = ""
+
+    if "prefix-list" in policy:
+        for p in policy["prefix-list"]:
+            cmd += f"""
+            delete policy prefix-list {p["name"]}
+            """
+            n = 1
+            for r in p["rule"]:
+                cmd += f"""
+                set policy prefix-list {p['name']} rule {n} action {r["action"]}
+                set policy prefix-list {p['name']} rule {n} prefix {r["prefix"]}
+                {f"set policy prefix-list {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
+                {f"set policy prefix-list {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
+                """
+                n += 1
+
+    if "prefix-list6" in policy:
+        for p in policy["prefix-list6"]:
+            cmd += f"""
+            delete policy prefix-list6 {p["name"]}
+            """
+            n = 1
+            for r in p["rule"]:
+                cmd += f"""
+                set policy prefix-list6 {p['name']} rule {n} action {r["action"]}
+                set policy prefix-list6 {p['name']} rule {n} prefix {r["prefix"]}
+                {f"set policy prefix-list6 {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
+                {f"set policy prefix-list6 {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
+                """
+                n += 1
+
+    if "as-path-list" in policy:
+        for p in policy["as-path-list"]:
+            cmd += f"""
+            delete policy as-path-list {p["name"]}
+            """
+            n = 1
+            for r in p["rule"]:
+                cmd += f"""
+                set policy as-path-list {p['name']} rule {n} action {r["action"]}
+                set policy as-path-list {p['name']} rule {n} regex {r["regex"]}
+                """
+                n += 1
+
+    # community-list, large-community-list, route-map not used now
+
+    return cmd
+
+
+def get_vyos_route_map_redistribute(redistribute):
+    """cmd to configure vyos route-map redistribute"""
+
+    f = """
+    set protocols bgp address-family ipv4-unicast redistribute connected route-map AUTOGEN-Redistribute
+    set protocols bgp address-family ipv4-unicast redistribute static route-map AUTOGEN-Redistribute
+    set protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
+    set protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
+    delete policy route-map AUTOGEN-Redistribute
+    set policy route-map AUTOGEN-Redistribute rule 10000 action permit"
+    """
+
+    r = 1000
+    for c in redistribute:
+        f += f"""
+        set policy route-map AUTOGEN-Redistribute rule {r} action {c["action"]}
+        set policy route-map AUTOGEN-Redistribute rule {r} match {c["match"]}
+        """
+        if "set" in c:
+            f += f"""
+            set policy route-map AUTOGEN-Redistribute rule {r} set {c["set"]}
+            """
+        # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
+        if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
+            f += f"""
+            set policy route-map AUTOGEN-Redistribute rule {r} on-match next
+            """
+        r += 1
+
+    return f
+
+
 def get_vyos_protocol_rpki(server_list):
     """cmd to configure vyos protocol rpki"""
 
@@ -382,7 +475,7 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} set {c["set"]}
                 """
-            # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
+            # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
             if c["action"] == "permit" and (
                 "on-match-next" not in c or c["on-match-next"]
             ):
@@ -413,7 +506,7 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} set {c["set"]}
                 """
-            # 或者给这些on-match-next false的全部跳转到1000？目前没跳转，不影响
+            # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
             if c["action"] == "permit" and (
                 "on-match-next" not in c or c["on-match-next"]
             ):
@@ -527,17 +620,36 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     set policy route-map {route_map_out_name} rule 100 on-match next
     # rule 200-999 for this code
     set policy route-map {route_map_out_name} rule 200 action deny
-    set policy route-map {route_map_out_name} rule 200 match large-community large-community-list AUTOGEN-DNA-AS{asn}
+    set policy route-map {route_map_out_name} rule 200 match large-community large-community-list AUTOGEN-DNA-ANY
     set policy route-map {route_map_out_name} rule 201 action deny
-    set policy route-map {route_map_out_name} rule 201 match large-community large-community-list AUTOGEN-DNA-NID{neighbor_id}
+    set policy route-map {route_map_out_name} rule 201 match large-community large-community-list AUTOGEN-DNA-AS{asn}
     set policy route-map {route_map_out_name} rule 202 action deny
-    set policy route-map {route_map_out_name} rule 202 match large-community large-community-list AUTOGEN-DNA-ANY
+    set policy route-map {route_map_out_name} rule 202 match large-community large-community-list AUTOGEN-DNA-NID{neighbor_id}
+    set policy route-map {route_map_out_name} rule 300 action permit
+    set policy route-map {route_map_out_name} rule 300 match large-community large-community-list AUTOGEN-OLA-AS{asn}
+    set policy route-map {route_map_out_name} rule 300 on-match goto 401
+    set policy route-map {route_map_out_name} rule 301 action permit
+    set policy route-map {route_map_out_name} rule 301 match large-community large-community-list AUTOGEN-OLA-NID{neighbor_id}
+    set policy route-map {route_map_out_name} rule 301 on-match goto 401
+    set policy route-map {route_map_out_name} rule 302 action deny
+    set policy route-map {route_map_out_name} rule 302 match large-community large-community-list AUTOGEN-OLA-ALL
+    set policy route-map {route_map_out_name} rule 401 action permit
+    set policy route-map {route_map_out_name} rule 401 match large-community large-community-list AUTOGEN-Prepend-1X-AS{asn}
+    set policy route-map {route_map_out_name} rule 401 set as-path prepend-last-as 1 # will this prepend my asn or neighbor's asn?
+    set policy route-map {route_map_out_name} rule 401 on-match next
+    set policy route-map {route_map_out_name} rule 402 action permit
+    set policy route-map {route_map_out_name} rule 402 match large-community large-community-list AUTOGEN-Prepend-2X-AS{asn}
+    set policy route-map {route_map_out_name} rule 402 set as-path prepend-last-as 2
+    set policy route-map {route_map_out_name} rule 402 on-match next
     # rule 1000-9999 for pre-export-accept in config
     set policy route-map {route_map_out_name} rule 10000 action permit
 
     delete policy large-community-list AUTOGEN-DNA-NID{neighbor_id}
     set policy large-community-list AUTOGEN-DNA-NID{neighbor_id} rule 10 action 'permit'
     set policy large-community-list AUTOGEN-DNA-NID{neighbor_id} rule 10 regex "{local_asn}:1001:{neighbor_id}"
+    delete policy large-community-list AUTOGEN-OLA-NID{neighbor_id}
+    set policy large-community-list AUTOGEN-OLA-NID{neighbor_id} rule 10 action 'permit'
+    set policy large-community-list AUTOGEN-OLA-NID{neighbor_id} rule 10 regex "{local_asn}:1101:{neighbor_id}"
     """
 
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
@@ -721,12 +833,12 @@ def get_final_vyos_cmd(router_config):
         configure += get_vyos_as_community(asn)
 
     # local asn prefix list
-    configure += get_vyos_prefix_list(
-        4, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
-    )
-    configure += get_vyos_prefix_list(
-        6, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
-    )
+    # configure += get_vyos_prefix_list(
+    #     4, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
+    # )
+    # configure += get_vyos_prefix_list(
+    #     6, local_asn, filter_name="AUTOGEN-LOCAL-ASN-CONE", cone=True
+    # )
     configure += get_vyos_prefix_list(
         4, local_asn, filter_name="AUTOGEN-LOCAL-ASN-PREFIX4"
     )
@@ -746,6 +858,14 @@ def get_final_vyos_cmd(router_config):
 
     # protocol rpki
     configure += get_vyos_protocol_rpki(router_config["protocols"]["rpki"])
+
+    # policy
+    if "policy" in router_config:
+        configure += get_vyos_policy(router_config["policy"])
+
+    # redistribute
+    if "redistribute" in router_config:
+        configure += get_vyos_route_map_redistribute(router_config["redistribute"])
 
     # protocol bgp
     configure += get_vyos_protocol_bgp(router_config["protocols"]["bgp"], router_id)

@@ -1,0 +1,5 @@
+delete policy large-community-list AUTOGEN-OLA-ALL
+set policy large-community-list AUTOGEN-OLA-ALL rule 10 action 'permit'
+set policy large-community-list AUTOGEN-OLA-ALL rule 10 regex "${ASN}:1100:.*"
+set policy large-community-list AUTOGEN-OLA-ALL rule 20 action 'permit'
+set policy large-community-list AUTOGEN-OLA-ALL rule 20 regex "${ASN}:1101:.*"
