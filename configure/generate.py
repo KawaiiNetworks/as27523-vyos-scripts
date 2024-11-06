@@ -131,10 +131,10 @@ def get_vyos_as_community(asn):
 
     delete policy large-community-list AUTOGEN-Prepend-1X-AS{asn}
     set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 regex "{local_asn}:1011:{asn}"
+    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 regex "{local_asn}:2001:{asn}"
     delete policy large-community-list AUTOGEN-Prepend-2X-AS{asn}
     set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 regex "{local_asn}:1012:{asn}"
+    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 regex "{local_asn}:2002:{asn}"
     """
 
 
