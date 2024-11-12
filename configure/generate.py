@@ -47,11 +47,15 @@ prefix_matrix_map = {}
 cone_prefix_matrix_map = {}
 """(ipversion, as):[(network, length, ge, le, object_mask, invert_mask)]"""
 
-
 neighbor_id_hashmap = {}
+"""neighbor_id:neighbor_str"""
+
+warnings = []
 
 
 def get_neighbor_id(neighbor):
+    """generate a unique neighbor id from neighbor asn and address"""
+
     neighbor_address_list = neighbor["neighbor-address"]
     if not isinstance(neighbor_address_list, list):
         neighbor_address_list = [neighbor_address_list]
@@ -77,7 +81,7 @@ def get_router_id(router_name):
     answer = dns.resolver.resolve(router_name, "A")
     if len(answer) != 1:
         print("router-id for {router_name} is not unique")
-        return None
+        raise ValueError("router-id for {router_name} is not unique")
     return answer[0].address
 
 
@@ -96,6 +100,11 @@ def get_as_info(asn):
         response["info_prefixes4"],
         response["info_prefixes6"],
     )
+    if maximum_prefix_map[asn][0] == 0:
+        warnings.append(f"AS{asn} maximum-prefix4 is 0")
+    if maximum_prefix_map[asn][1] == 0:
+        warnings.append(f"AS{asn} maximum-prefix6 is 0")
+
     if response["aka"] != "" and len(response["aka"]) < len(response["name"]):
         as_name_map[asn] = response["aka"]
     else:
@@ -111,6 +120,7 @@ def get_as_info(asn):
             as_set_name_list.append(n)
     if not as_set_name_list:
         print(f"AS{asn} as-set name not found, use default AS{asn}")
+        warnings.append(f"AS{asn} as-set name not found, use default AS{asn}")
         as_set_name_list = [f"AS{asn}"]
 
     asset_name_map[asn] = as_set_name_list
@@ -249,6 +259,9 @@ def get_vyos_as_path(asn):
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
             """
+            warnings.append(
+                f"AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will accept all as-path."
+            )
             print(
                 f"Warn: AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will accept all as-path."
             )
@@ -258,6 +271,9 @@ def get_vyos_as_path(asn):
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action deny
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '.*'
             """
+            warnings.append(
+                f"AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will deny all as-path."
+            )
             print(
                 f"Warn: AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will deny all as-path except {asn}."
             )
@@ -288,6 +304,9 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
 
     def vyos_cmd_when_limit_violation(pl, fn, prefix_count):
         if config["as-set"]["limit-violation"] == "accept":
+            warnings.append(
+                f"AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will accept all prefix."
+            )
             print(
                 f"Warn: AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will accept all prefix."
             )
@@ -297,6 +316,9 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
             set policy {pl} {fn} rule 10 le {24 if ipversion == 4 else 48}
             """
         elif config["as-set"]["limit-violation"] == "deny":
+            warnings.append(
+                f"AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will deny all prefix."
+            )
             print(
                 f"Warn: AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will deny all prefix."
             )
@@ -333,6 +355,9 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
         set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
         set policy {pl} {fn} rule 10 le {32 if ipversion == 4 else 128}
         """
+        warnings.append(
+            f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
+        )
         print(
             f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
         )
@@ -813,9 +838,6 @@ def get_final_vyos_cmd(router_config):
 
     router_name = router_config["name"]
     router_id = get_router_id(router_name)
-    if not router_id:
-        print(f"resolve router-id for {router_name} failed")
-        return ""
     print(f"generate vyos bgp script for {router_name}({router_id})")
 
     configure = ""
@@ -961,11 +983,6 @@ if __name__ == "__main__":
         ) as f:
             f.write(script)
         print(f"configure.{router['name']}.sh generated.")
-        # except ValueError as e:
-        #     if str(e) == "hash collision":
-        #         print(f"generate configure.{router['name']}.sh failed: ", e)
-        #         break
-        #     else:
-        #         print(f"generate configure.{router['name']}.sh failed: ", e)
-        # except Exception as e:
-        #     print(f"generate configure.{router['name']}.sh failed: ", e)
+
+    for w in warnings:
+        print(w)
