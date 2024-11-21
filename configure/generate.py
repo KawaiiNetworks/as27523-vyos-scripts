@@ -937,7 +937,7 @@ def get_final_vyos_cmd(router_config):
         + "\necho 'configure done'\n"
         + '\nvtysh -c "watchfrr ignore bgpd"\n'  # watchfrr ignore bgpd so bgpd won't be killed when it hasn't response in 90s
         + "\ncommit\n"
-        + '\nvtysh -c "no watchfrr ignore bgpd"\n'  # recover watchfrr config
+        # + '\nvtysh -c "no watchfrr ignore bgpd"\n'  # recover watchfrr config
         + "\nexit\n"
     )
 
