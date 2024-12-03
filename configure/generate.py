@@ -428,7 +428,7 @@ def get_vyos_policy(policy):
             for r in p["rule"]:
                 cmd += f"""
                 set policy as-path-list {p['name']} rule {n} action {r["action"]}
-                set policy as-path-list {p['name']} rule {n} regex {r["regex"]}
+                set policy as-path-list {p['name']} rule {n} regex '{r["regex"]}'
                 {f"set policy as-path-list {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
                 """
                 n += 1
