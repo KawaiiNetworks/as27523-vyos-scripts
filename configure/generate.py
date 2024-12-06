@@ -501,8 +501,11 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
         for c in neighbor["pre-import-accept"]:
             f += f"""
             set policy route-map {route_map_in_name} rule {r} action {c["action"]}
-            set policy route-map {route_map_in_name} rule {r} match {c["match"]}
             """
+            if "match" in c:
+                f += f"""
+                set policy route-map {route_map_in_name} rule {r} match {c["match"]}
+                """
             if "set" in c:
                 f += f"""
                 set policy route-map {route_map_in_name} rule {r} set {c["set"]}
@@ -532,8 +535,11 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
         for c in neighbor["pre-export-accept"]:
             f += f"""
             set policy route-map {route_map_out_name} rule {r} action {c["action"]}
-            set policy route-map {route_map_out_name} rule {r} match {c["match"]}
             """
+            if "match" in c:
+                f += f"""
+                set policy route-map {route_map_out_name} rule {r} match {c["match"]}
+                """
             if "set" in c:
                 f += f"""
                 set policy route-map {route_map_out_name} rule {r} set {c["set"]}
