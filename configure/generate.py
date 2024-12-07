@@ -741,28 +741,28 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
 
 
 def get_vyos_set_src(router_config):
-    cmd = """
-    delete policy route-map AUTOGEN-SET-SRC
-    set policy route-map AUTOGEN-SET-SRC rule 10 action 'permit'
-    set policy route-map AUTOGEN-SET-SRC rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
-    set policy route-map AUTOGEN-SET-SRC rule 20 action 'permit'
-    set policy route-map AUTOGEN-SET-SRC rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
-    """
-
-    if "src" in router_config:
-        if "ipv4" in router_config["src"]:
+    cmd = ""
+    for setsrc in router_config["src"]:
+        protocol = setsrc["protocol"]
+        cmd += f"""
+        delete policy route-map AUTOGEN-SET-SRC-{protocol}
+        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 action 'permit'
+        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
+        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 action 'permit'
+        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
+        """
+        if "ipv4" in setsrc:
             cmd += f"""
-            set policy route-map AUTOGEN-SET-SRC rule 10 set src '{router_config["src"]["ipv4"]}'
-            delete system ip protocol bgp
-            set system ip protocol bgp route-map AUTOGEN-SET-SRC
+            set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 set src '{setsrc["ipv4"]}'
+            delete system ip protocol {protocol}
+            set system ip protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
             """
-        if "ipv6" in router_config["src"]:
+        if "ipv6" in setsrc:
             cmd += f"""
-            set policy route-map AUTOGEN-SET-SRC rule 20 set src '{router_config["src"]["ipv6"]}'
-            delete system ipv6 protocol bgp
-            set system ipv6 protocol bgp route-map AUTOGEN-SET-SRC
+            set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 set src '{setsrc["ipv6"]}'
+            delete system ipv6 protocol {protocol}
+            set system ipv6 protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
             """
-
     return cmd
 
 
