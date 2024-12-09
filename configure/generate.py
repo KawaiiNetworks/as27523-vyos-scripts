@@ -282,10 +282,11 @@ def get_vyos_as_path(asn):
             raise ValueError("as-set limit-violation must be accept, deny")
 
     if len(cone_list) > 0:
-        full_vyos_cmd += f"""
-        set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
-        set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*_({"|".join(cone_list)})$'
-        """
+        for i in range(0, len(cone_list), 20):
+            full_vyos_cmd += f"""
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} action permit
+            set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} regex '^{asn}(_[0-9]+)*_({"|".join(cone_list[i:i+20 if i+20 < len(cone_list) else len(cone_list)])})$'
+            """
     print(f"AS{asn} as-path filter generated.")
     return full_vyos_cmd
 
