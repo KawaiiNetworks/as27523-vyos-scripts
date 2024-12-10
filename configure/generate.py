@@ -1,14 +1,14 @@
 from copy import deepcopy
-import requests
 import os
 import subprocess
 import ipaddress
 import json
-import yaml
 import time
 import re
-import dns.resolver
 import hashlib
+import requests
+import yaml
+import dns.resolver
 
 work_dir = os.path.dirname(os.path.abspath(__file__))
 github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
@@ -325,7 +325,7 @@ def get_vyos_blacklist_filter(blacklist_config):
             """
             p6_r += 1
 
-    print(f"blacklist filter generated.")
+    print("blacklist filter generated.")
     return full_vyos_cmd
 
 

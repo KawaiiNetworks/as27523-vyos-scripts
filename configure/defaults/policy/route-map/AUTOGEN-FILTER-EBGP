@@ -4,3 +4,6 @@ set policy route-map AUTOGEN-FILTER-EBGP rule 10 call 'AUTOGEN-REJECT-BOGONS'
 set policy route-map AUTOGEN-FILTER-EBGP rule 10 on-match next
 set policy route-map AUTOGEN-FILTER-EBGP rule 20 action 'permit'
 set policy route-map AUTOGEN-FILTER-EBGP rule 20 call 'AUTOGEN-FILTER-RPKI'
+set policy route-map AUTOGEN-FILTER-EBGP rule 20 on-match next
+set policy route-map AUTOGEN-FILTER-EBGP rule 30 action 'permit'
+set policy route-map AUTOGEN-FILTER-EBGP rule 30 call 'AUTOGEN-FILTER-BLACKLIST'
