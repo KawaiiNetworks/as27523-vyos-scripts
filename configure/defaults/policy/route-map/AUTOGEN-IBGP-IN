@@ -1,8 +1,11 @@
 delete policy route-map AUTOGEN-IBGP-IN
 set policy route-map AUTOGEN-IBGP-IN rule 10 action 'permit'
-set policy route-map AUTOGEN-IBGP-IN rule 10 call 'AUTOGEN-FILTER-IBGP'
+set policy route-map AUTOGEN-IBGP-IN rule 10 call 'AUTOGEN-FILTER-BLACKLIST'
 set policy route-map AUTOGEN-IBGP-IN rule 10 on-match next
 set policy route-map AUTOGEN-IBGP-IN rule 20 action 'permit'
-set policy route-map AUTOGEN-IBGP-IN rule 20 set large-community add "${ASN}:0:100"
-set policy route-map AUTOGEN-IBGP-IN rule 20 set local-preference '90'
-set policy route-map AUTOGEN-IBGP-IN rule 20 set metric '1000'
+set policy route-map AUTOGEN-IBGP-IN rule 20 call 'AUTOGEN-FILTER-IBGP'
+set policy route-map AUTOGEN-IBGP-IN rule 20 on-match next
+set policy route-map AUTOGEN-IBGP-IN rule 30 action 'permit'
+set policy route-map AUTOGEN-IBGP-IN rule 30 set large-community add "${ASN}:0:100"
+set policy route-map AUTOGEN-IBGP-IN rule 30 set local-preference '90'
+set policy route-map AUTOGEN-IBGP-IN rule 30 set metric '1000'

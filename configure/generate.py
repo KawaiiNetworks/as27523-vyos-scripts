@@ -71,6 +71,8 @@ as_tier1 = [
     6939,
 ]
 
+blacklist_config = config["blacklist"]
+
 
 def get_neighbor_id(neighbor):
     """generate a unique neighbor id from neighbor asn and address"""
@@ -168,7 +170,11 @@ def get_vyos_as_community(asn):
 def get_asset_name(asn):
     """use peeringdb to get as-set name"""
 
-    return deepcopy(asset_name_map[asn])
+    if asn in asset_name_map:
+        return deepcopy(asset_name_map[asn])
+    else:
+        get_as_info(asn)
+        return deepcopy(asset_name_map[asn])
 
 
 def get_as_set_member(asn):
@@ -254,6 +260,68 @@ def get_cone_prefix_matrix(ipversion, asn):
     cone_prefix_matrix_map[(ipversion, asn)] = cone_prefix_matrix
     print(f"AS{asn} cone prefix{ipversion} matrix generated.")
     return deepcopy(cone_prefix_matrix)
+
+
+def get_vyos_blacklist_filter(blacklist_config):
+    """cmd to configure vyos blacklist filter"""
+
+    full_vyos_cmd = """
+    delete policy as-path-list AUTOGEN-AS-BLACKLIST
+    set policy as-path-list AUTOGEN-AS-BLACKLIST
+    delete policy prefix-list AUTOGEN-PREFIX-BLACKLIST
+    set policy prefix-list AUTOGEN-PREFIX-BLACKLIST
+    delete policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
+    set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
+
+    delete policy route-map AUTOGEN-FILTER-BLACKLIST
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 10 action deny
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 10 match as-path AUTOGEN-AS-BLACKLIST
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 action deny
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 match ip address prefix-list AUTOGEN-PREFIX-BLACKLIST
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 action deny
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 match ip address prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 100 action permit
+    """
+
+    as_r = 1
+    if "asn" in blacklist_config:
+        as_list = blacklist_config["asn"]
+        for n in range(0, len(blacklist_config["asn"]), 20):
+            full_vyos_cmd += f"""
+            set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
+            set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} regex '_({"|".join(as_list[n:n+20 if n+20 < len(as_list) else len(as_list)])})_'
+            """
+            as_r += 1
+    if "as-set" in blacklist_config:
+        for asset_name in blacklist_config["as-set"]:
+            as_list = get_as_set_member(asset_name)
+            for n in range(0, len(as_list), 20):
+                full_vyos_cmd += f"""
+                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
+                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} regex '_({"|".join(as_list[n:n+20 if n+20 < len(as_list) else len(as_list)])})_'
+                """
+                as_r += 1
+
+    p4_r = 1
+    if "prefix4" in blacklist_config:
+        for prefix in blacklist_config["prefix4"]:
+            full_vyos_cmd += f"""
+            set policy prefix-list AUTOGEN-PREFIX-BLACKLIST rule {p4_r} action deny
+            set policy prefix-list AUTOGEN-PREFIX-BLACKLIST rule {p4_r} prefix {prefix}
+            """
+            p4_r += 1
+
+    p6_r = 1
+    if "prefix6" in blacklist_config:
+        for prefix in blacklist_config["prefix6"]:
+            full_vyos_cmd += f"""
+            set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST rule {p6_r} action deny
+            set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST rule {p6_r} prefix {prefix}
+            """
+            p6_r += 1
+
+    print(f"blacklist filter generated.")
+    return full_vyos_cmd
 
 
 def get_vyos_as_path(asn):
@@ -868,6 +936,7 @@ def get_final_vyos_cmd(router_config):
     ]
     connected_asns = upstream_asns + routeserver_asns + peer_asns + downstream_asns
     connected_asns = sorted(list(set(connected_asns)))
+    configure += get_vyos_blacklist_filter(blacklist_config)
     get_as_info(local_asn)
     configure += get_vyos_as_community(
         local_asn
