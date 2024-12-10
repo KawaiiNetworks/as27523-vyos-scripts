@@ -284,7 +284,7 @@ def get_vyos_blacklist_filter(blacklist_config):
     set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 action deny
     set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 match ip address prefix-list AUTOGEN-PREFIX-BLACKLIST
     set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 action deny
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 match ip address prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
+    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 match ipv6 address prefix-list AUTOGEN-PREFIX6-BLACKLIST
     set policy route-map AUTOGEN-FILTER-BLACKLIST rule 100 action permit
     """
 
