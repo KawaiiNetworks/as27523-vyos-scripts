@@ -285,7 +285,7 @@ def get_vyos_blacklist_filter(blacklist_config):
 
     as_r = 1
     if "asn" in blacklist_config:
-        as_list = blacklist_config["asn"]
+        as_list = [str(x) for x in blacklist_config["asn"]]
         for n in range(0, len(blacklist_config["asn"]), 20):
             full_vyos_cmd += f"""
             set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
@@ -294,7 +294,7 @@ def get_vyos_blacklist_filter(blacklist_config):
             as_r += 1
     if "as-set" in blacklist_config:
         for asset_name in blacklist_config["as-set"]:
-            as_list = get_as_set_member(asset_name)
+            as_list = [str(x) for x in get_as_set_member(asset_name)]
             for n in range(0, len(as_list), 20):
                 full_vyos_cmd += f"""
                 set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
