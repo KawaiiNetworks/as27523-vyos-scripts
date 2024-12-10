@@ -71,8 +71,6 @@ as_tier1 = [
     6939,
 ]
 
-blacklist_config = config["blacklist"]
-
 
 def get_neighbor_id(neighbor):
     """generate a unique neighbor id from neighbor asn and address"""
@@ -941,7 +939,9 @@ def get_final_vyos_cmd(router_config):
     ]
     connected_asns = upstream_asns + routeserver_asns + peer_asns + downstream_asns
     connected_asns = sorted(list(set(connected_asns)))
-    configure += get_vyos_blacklist_filter(blacklist_config)
+    if "blacklist" in config:
+        # but it is in global config, this will cause waste of resource
+        configure += get_vyos_blacklist_filter(config["blacklist"])
     get_as_info(local_asn)
     configure += get_vyos_as_community(
         local_asn
