@@ -177,33 +177,38 @@ def get_asset_name(asn):
         return deepcopy(asset_name_map[asn])
 
 
-def get_as_set_member(asn):
-    """use bgpq4 to get as-set member"""
+def get_as_cone_member(asn):
+    """use bgpq4 to get as cone member from as-set from peeringdb"""
 
     if asn in cone_map:
         return deepcopy(cone_map[asn])
 
     asset_name_list = get_asset_name(asn)  # an asn may have multiple as-set
-
     res = []
-
     for asset_name in asset_name_list:
-        cmd = (
-            f"bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -jt {asset_name}"
-        )
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-        )
-        res += json.loads(result.stdout)["NN"]
+        res += get_as_set_member(asset_name)
+
     res = sorted(list(set(res)))
     cone_map[asn] = res
     print(f"AS{asn} cone list: {res}")
     return deepcopy(res)
+
+
+def get_as_set_member(asset_name):
+    """use bgpq4 to get as-set member"""
+
+    cmd = f"bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -jt {asset_name}"
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+    )
+    res = json.loads(result.stdout)["NN"]
+    res = sorted(list(set(res)))
+    return res
 
 
 def get_prefix_matrix(ipversion, asn):
@@ -333,7 +338,7 @@ def get_vyos_as_path(asn):
     set policy as-path-list AUTOGEN-AS{asn}-IN rule 10 regex '^{asn}(_{asn})*$'
     """
 
-    cone_list = get_as_set_member(asn)
+    cone_list = get_as_cone_member(asn)
     if asn in cone_list:
         cone_list.remove(asn)
     if 0 in cone_list:
