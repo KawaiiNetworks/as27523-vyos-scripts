@@ -1,4 +1,5 @@
-blacklist
 vrf?
+blackhole
 simple-ibgp-out add downstream, and delete /25-/32 and /49-/128?(小段backbone有用，暂时别删)
 reject tier1 in as path from peer
+large asn verify 替代 limit-violaion
