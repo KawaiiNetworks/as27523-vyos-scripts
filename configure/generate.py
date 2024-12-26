@@ -36,7 +36,7 @@ asset_name_map = {}
 """as:as-set"""
 
 maximum_prefix_map = {}
-"""as:(maximum-prefix4, maximum-prefix6)"""
+"""as:[maximum-prefix4, maximum-prefix6]"""
 
 cone_map = {}
 """as:[as-set member]"""
@@ -114,10 +114,10 @@ def get_as_info(asn):
     print(f"getting AS{asn} info...")
     response = requests.get(url, timeout=10).json()["data"][0]
 
-    maximum_prefix_map[asn] = (
+    maximum_prefix_map[asn] = [
         response["info_prefixes4"],
         response["info_prefixes6"],
-    )
+    ]
     if maximum_prefix_map[asn][0] == 0:
         warnings.append(f"AS{asn} maximum-prefix4 is 0, change to 1")
         maximum_prefix_map[asn][0] = 1
