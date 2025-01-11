@@ -862,48 +862,15 @@ def get_vyos_kernel(kernel_config):
     return cmd
 
 
-# def get_vyos_set_src(router_config):
-#     cmd = ""
-#     for setsrc in router_config["src"]:
-#         protocol = setsrc["protocol"]
-#         cmd += f"""
-#         delete policy route-map AUTOGEN-SET-SRC-{protocol}
-#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 action 'permit'
-#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
-#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 action 'permit'
-#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
-#         """
-#         if "ipv4" in setsrc:
-#             cmd += f"""
-#             set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 set src '{setsrc["ipv4"]}'
-#             delete system ip protocol {protocol}
-#             set system ip protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
-#             """
-#         if "ipv6" in setsrc:
-#             cmd += f"""
-#             set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 set src '{setsrc["ipv6"]}'
-#             delete system ipv6 protocol {protocol}
-#             set system ipv6 protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
-#             """
-#     return cmd
-
-
 def get_vyos_system_frr():
     return """
-    delete system frr
-    set system frr bmp
-    set system frr snmp bgpd
-    set system frr snmp isisd
-    set system frr snmp ldpd
-    set system frr snmp ospf6d
-    set system frr snmp ospfd
-    set system frr snmp ripd
-    set system frr snmp zebra
     """
 
 
 def get_vyos_bmp(bmp_config):
     cmd = """
+    delete system frr
+    set system frr bmp
     delete protocols bgp bmp
     """
     for bmp_server in bmp_config:
@@ -925,6 +892,13 @@ def get_vyos_bmp(bmp_config):
 
 def get_vyos_sflow(sflow_config):
     cmd = f"""
+    set system frr snmp bgpd
+    set system frr snmp isisd
+    set system frr snmp ldpd
+    set system frr snmp ospf6d
+    set system frr snmp ospfd
+    set system frr snmp ripd
+    set system frr snmp zebra
     delete system sflow
     set system sflow agent-address {sflow_config["agent-address"]}
     """
@@ -1051,10 +1025,6 @@ def get_final_vyos_cmd(router_config):
     # kernel
     if "kernel" in router_config:
         configure += get_vyos_kernel(router_config["kernel"])
-
-    # # set route src
-    # if "src" in router_config:
-    #     configure += get_vyos_set_src(router_config)
 
     configure = "\n".join(
         [line.strip() for line in configure.splitlines() if line.strip()]

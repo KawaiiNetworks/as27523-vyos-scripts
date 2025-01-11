@@ -13,5 +13,5 @@ protocols bgp bmp
 system frr
 system sflow
 service snmp
-system ip protocol bgp
-system ipv6 protocol bgp
+system ip protocol
+system ipv6 protocol
