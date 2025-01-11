@@ -565,6 +565,25 @@ def get_vyos_protocol_rpki(server_list):
     return cmd
 
 
+def vyos_pre_accept_filter(route_map_name, r, c):
+    cmd = f"""
+    set policy route-map {route_map_name} rule {r} action {c["action"]}
+    """
+    if "match" in c:
+        cmd += f"""
+        set policy route-map {route_map_name} rule {r} match {c["match"]}
+        """
+    if "set" in c:
+        cmd += f"""
+        set policy route-map {route_map_name} rule {r} set {c["set"]}
+        """
+    if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
+        cmd += f"""
+        set policy route-map {route_map_name} rule {r} on-match next
+        """
+    return cmd
+
+
 def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
     """cmd to configure vyos neighbor optional attributes"""
 
@@ -581,24 +600,7 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
     if "pre-import-accept" in neighbor:
         r = 1000
         for c in neighbor["pre-import-accept"]:
-            f += f"""
-            set policy route-map {route_map_in_name} rule {r} action {c["action"]}
-            """
-            if "match" in c:
-                f += f"""
-                set policy route-map {route_map_in_name} rule {r} match {c["match"]}
-                """
-            if "set" in c:
-                f += f"""
-                set policy route-map {route_map_in_name} rule {r} set {c["set"]}
-                """
-            # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
-            if c["action"] == "permit" and (
-                "on-match-next" not in c or c["on-match-next"]
-            ):
-                f += f"""
-                set policy route-map {route_map_in_name} rule {r} on-match next
-                """
+            f += vyos_pre_accept_filter(route_map_in_name, r, c)
             r += 1
     return f
 
@@ -615,24 +617,7 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
     if "pre-export-accept" in neighbor:
         r = 1000
         for c in neighbor["pre-export-accept"]:
-            f += f"""
-            set policy route-map {route_map_out_name} rule {r} action {c["action"]}
-            """
-            if "match" in c:
-                f += f"""
-                set policy route-map {route_map_out_name} rule {r} match {c["match"]}
-                """
-            if "set" in c:
-                f += f"""
-                set policy route-map {route_map_out_name} rule {r} set {c["set"]}
-                """
-            # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
-            if c["action"] == "permit" and (
-                "on-match-next" not in c or c["on-match-next"]
-            ):
-                f += f"""
-                set policy route-map {route_map_out_name} rule {r} on-match next
-                """
+            f += vyos_pre_accept_filter(route_map_out_name, r, c)
             r += 1
 
     return f
@@ -825,30 +810,79 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     return cmd
 
 
-def get_vyos_set_src(router_config):
+def get_vyos_kernel(router_config):
     cmd = ""
-    for setsrc in router_config["src"]:
-        protocol = setsrc["protocol"]
-        cmd += f"""
-        delete policy route-map AUTOGEN-SET-SRC-{protocol}
-        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 action 'permit'
-        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
-        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 action 'permit'
-        set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
-        """
-        if "ipv4" in setsrc:
+    if "ipv4" in router_config["kernel"]:
+        for routemap in router_config["kernel"]["ipv4"]:
+            protocol = routemap["protocol"]
             cmd += f"""
-            set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 set src '{setsrc["ipv4"]}'
+            delete policy route-map AUTOGEN-KERNEL-IPv4-{protocol}
+            set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 100 action permit
             delete system ip protocol {protocol}
-            set system ip protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
+            set system ip protocol {protocol} route-map AUTOGEN-KERNEL-IPv4-{protocol}
             """
-        if "ipv6" in setsrc:
+            if "src" in routemap:
+                cmd += f"""
+                set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 action permit
+                set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
+                set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 set src '{routemap["src"]}'
+                """
+            if "pre-accept" in routemap:
+                r = 10
+                for c in routemap["pre-accept"]:
+                    cmd += vyos_pre_accept_filter(
+                        f"AUTOGEN-KERNEL-IPv4-{protocol}", r, c
+                    )
+                    r += 1
+
+    if "ipv6" in router_config["kernel"]:
+        for routemap in router_config["kernel"]["ipv6"]:
+            protocol = routemap["protocol"]
             cmd += f"""
-            set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 set src '{setsrc["ipv6"]}'
+            delete policy route-map AUTOGEN-KERNEL-IPv6-{protocol}
+            set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 100 action permit
             delete system ipv6 protocol {protocol}
-            set system ipv6 protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
+            set system ipv6 protocol {protocol} route-map AUTOGEN-KERNEL-IPv6-{protocol}
             """
-    return cmd
+            if "src" in routemap:
+                cmd += f"""
+                set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 action permit
+                set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
+                set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 set src '{routemap["src"]}'
+                """
+            if "pre-accept" in routemap:
+                r = 10
+                for c in routemap["pre-accept"]:
+                    cmd += vyos_pre_accept_filter(
+                        f"AUTOGEN-KERNEL-IPv6-{protocol}", r, c
+                    )
+                    r += 1
+
+
+# def get_vyos_set_src(router_config):
+#     cmd = ""
+#     for setsrc in router_config["src"]:
+#         protocol = setsrc["protocol"]
+#         cmd += f"""
+#         delete policy route-map AUTOGEN-SET-SRC-{protocol}
+#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 action 'permit'
+#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
+#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 action 'permit'
+#         set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
+#         """
+#         if "ipv4" in setsrc:
+#             cmd += f"""
+#             set policy route-map AUTOGEN-SET-SRC-{protocol} rule 10 set src '{setsrc["ipv4"]}'
+#             delete system ip protocol {protocol}
+#             set system ip protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
+#             """
+#         if "ipv6" in setsrc:
+#             cmd += f"""
+#             set policy route-map AUTOGEN-SET-SRC-{protocol} rule 20 set src '{setsrc["ipv6"]}'
+#             delete system ipv6 protocol {protocol}
+#             set system ipv6 protocol {protocol} route-map AUTOGEN-SET-SRC-{protocol}
+#             """
+#     return cmd
 
 
 def get_vyos_system_frr():
@@ -1011,9 +1045,13 @@ def get_final_vyos_cmd(router_config):
                 router_config["service"]["snmp"], ipv4_to_engineid(router_id)
             )
 
-    # set route src
-    if "src" in router_config:
-        configure += get_vyos_set_src(router_config)
+    # kernel
+    if "kernel" in router_config:
+        configure += get_vyos_kernel(router_config)
+
+    # # set route src
+    # if "src" in router_config:
+    #     configure += get_vyos_set_src(router_config)
 
     configure = "\n".join(
         [line.strip() for line in configure.splitlines() if line.strip()]
