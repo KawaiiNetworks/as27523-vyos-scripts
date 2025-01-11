@@ -869,7 +869,7 @@ def get_vyos_system_frr():
 
 def get_vyos_bmp(bmp_config):
     cmd = """
-    delete system frr
+    delete system frr bmp
     set system frr bmp
     delete protocols bgp bmp
     """
@@ -892,6 +892,7 @@ def get_vyos_bmp(bmp_config):
 
 def get_vyos_sflow(sflow_config):
     cmd = f"""
+    delete system frr snmp
     set system frr snmp bgpd
     set system frr snmp isisd
     set system frr snmp ldpd
