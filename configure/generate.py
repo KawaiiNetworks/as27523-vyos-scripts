@@ -810,10 +810,10 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     return cmd
 
 
-def get_vyos_kernel(router_config):
+def get_vyos_kernel(kernel_config):
     cmd = ""
-    if "ipv4" in router_config["kernel"]:
-        for routemap in router_config["kernel"]["ipv4"]:
+    if "ipv4" in kernel_config:
+        for routemap in kernel_config["ipv4"]:
             protocol = routemap["protocol"]
             cmd += f"""
             delete policy route-map AUTOGEN-KERNEL-IPv4-{protocol}
@@ -835,8 +835,8 @@ def get_vyos_kernel(router_config):
                     )
                     r += 1
 
-    if "ipv6" in router_config["kernel"]:
-        for routemap in router_config["kernel"]["ipv6"]:
+    if "ipv6" in kernel_config:
+        for routemap in kernel_config["ipv6"]:
             protocol = routemap["protocol"]
             cmd += f"""
             delete policy route-map AUTOGEN-KERNEL-IPv6-{protocol}
@@ -857,6 +857,7 @@ def get_vyos_kernel(router_config):
                         f"AUTOGEN-KERNEL-IPv6-{protocol}", r, c
                     )
                     r += 1
+    return cmd
 
 
 # def get_vyos_set_src(router_config):
@@ -1047,7 +1048,7 @@ def get_final_vyos_cmd(router_config):
 
     # kernel
     if "kernel" in router_config:
-        configure += get_vyos_kernel(router_config)
+        configure += get_vyos_kernel(router_config["kernel"])
 
     # # set route src
     # if "src" in router_config:
