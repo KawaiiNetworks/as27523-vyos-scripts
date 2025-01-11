@@ -826,6 +826,7 @@ def get_vyos_kernel(kernel_config):
                 set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 action permit
                 set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 match ip address prefix-list 'AUTOGEN-IPv4-ALL'
                 set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 set src '{routemap["src"]}'
+                set policy route-map AUTOGEN-KERNEL-IPv4-{protocol} rule 1 on-match next
                 """
             if "pre-accept" in routemap:
                 r = 10
@@ -849,6 +850,7 @@ def get_vyos_kernel(kernel_config):
                 set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 action permit
                 set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 match ipv6 address prefix-list 'AUTOGEN-IPv6-ALL'
                 set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 set src '{routemap["src"]}'
+                set policy route-map AUTOGEN-KERNEL-IPv6-{protocol} rule 1 on-match next
                 """
             if "pre-accept" in routemap:
                 r = 10
