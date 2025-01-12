@@ -675,7 +675,7 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
         set protocols bgp neighbor {neighbor_address} solo
         set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-        {f"set protocols bgp neighbor {neighbor_address} interface source-interface {neighbor["update-source"]}" if not isIP(neighbor["update-source"]) else ""}
+        {f"set protocols bgp neighbor {neighbor_address} interface source-interface {neighbor['update-source']}" if not isIP(neighbor["update-source"]) else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
