@@ -1,4 +1,4 @@
-# VyOS Scripts for ISP
+# VyOS Scripts for Player ISP
 
 ## Features
 
