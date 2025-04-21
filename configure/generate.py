@@ -1106,6 +1106,17 @@ if __name__ == "__main__":
     ) as f:
         f.write(defaultconfig)
 
+    with open(
+        os.path.join(work_dir, "outputs", "find_unused.py"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        find_unused_template = open(
+            os.path.join(work_dir, "find_unused.py"), "r", encoding="utf-8"
+        ).read()
+        find_unused_template.replace(r"${default_config}", defaultconfig)
+        f.write(find_unused_template)
+
     print("All done. Below is the warnings: ----------------------------------")
     for w in warnings:
         print(w)

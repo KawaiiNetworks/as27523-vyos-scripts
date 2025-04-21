@@ -42,3 +42,4 @@ jobs:
           files: |
             configure/outputs/generate.log
             configure/outputs/*.sh
+            configure/outputs/*.py
