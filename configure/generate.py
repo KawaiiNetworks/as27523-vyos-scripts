@@ -1099,6 +1099,13 @@ if __name__ == "__main__":
             f.write(script)
         print(f"configure.{router['name']}.sh generated.")
 
+    with open(
+        os.path.join(work_dir, "outputs", "defaultconfig.sh"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        f.write(defaultconfig)
+
     print("All done. Below is the warnings: ----------------------------------")
     for w in warnings:
         print(w)
