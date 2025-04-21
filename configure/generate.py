@@ -1114,7 +1114,10 @@ if __name__ == "__main__":
         find_unused_template = open(
             os.path.join(work_dir, "find_unused.py"), "r", encoding="utf-8"
         ).read()
-        find_unused_template.replace(r"${default_config}", defaultconfig)
+        find_unused_template = find_unused_template.replace(
+            r"${default_config_url}",
+            f"https://github.com/{github_user}/{github_repo}/releases/download/nightly/defaultconfig.sh",
+        )
         f.write(find_unused_template)
 
     print("All done. Below is the warnings: ----------------------------------")

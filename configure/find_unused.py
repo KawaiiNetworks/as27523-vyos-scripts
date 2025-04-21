@@ -28,11 +28,8 @@ def download_default_config(url: str) -> str:
         return response.read().decode("utf-8")
 
 
-# url = "https://github.com/KawaiiNetworks/as27523-vyos-scripts/releases/download/nightly/defaultconfig.sh"
-# default_config = download_default_config(url)
-default_config = """
-${default_config}
-"""
+url = "${default_config_url}"
+default_config = download_default_config(url)
 
 
 def find_unused_definitions(config_text: str, entry_type: str):
@@ -121,7 +118,12 @@ def run_shell_script(script_str: str) -> str:
     返回：
         输出字符串（标准输出）
     """
-    result = subprocess.run(["bash", "-c", script_str], capture_output=True, text=True)
+    with open("tmp_script.sh", "w", encoding="utf-8") as f:
+        f.write(script_str)
+    subprocess.run(["chmod", "+x", "tmp_script.sh"])
+    result = subprocess.run(["./tmp_script.sh"], capture_output=True, text=True)
+    # 删除临时脚本文件
+    subprocess.run(["rm", "tmp_script.sh"])
     return result.stdout
 
 
@@ -133,10 +135,27 @@ if __name__ == "__main__":
 configure
 show
 exit
+exit
 """
     )
     config_text = run_shell_script(show_config_shell_str)
 
     vyos_cmd, _ = generate_delete_commands_all(config_text)
 
-    print(vyos_cmd)
+    with open("clear_unused.sh", "w", encoding="utf-8") as f:
+        clear_cmd = (
+            script_start
+            + """
+configure
+"""
+            + vyos_cmd
+            + """
+commit
+exit
+exit
+"""
+        )
+        f.write(clear_cmd)
+    subprocess.run(["chmod", "+x", "clear_unused.sh"])
+    # subprocess.run(["./clear_unused.sh"], capture_output=True, text=True)
+    # subprocess.run(["rm", "clear_unused.sh"])
