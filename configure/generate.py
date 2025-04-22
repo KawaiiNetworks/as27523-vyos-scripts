@@ -226,17 +226,17 @@ def get_as_set_member(asset_name):
 def aggregate_prefixes_modified(prefix_matrix, ipversion):
     """use aggregate_prefixes to aggregate prefix list, ignore ge, le"""
 
-    def _convert(p_str):
-        _p = p_str.split("/")
-        return (
-            (_p[0], _p[1], _p[1], "24")
-            if ipversion == 4
-            else (_p[0], _p[1], _p[1], "48")
-        )
-
     _prefixes = [f"{p[0]}/{p[1]}" for p in prefix_matrix]
     _prefixes = list(aggregate_prefixes(_prefixes))
-    return [_convert(p) for p in _prefixes]
+    return [
+        (
+            str(p.network_address),
+            str(p.prefixlen),
+            str(p.prefixlen),
+            str(24 if ipversion == 4 else 48),
+        )
+        for p in _prefixes
+    ]
 
 
 def get_prefix_matrix(ipversion, asn):
