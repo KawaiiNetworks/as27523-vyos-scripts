@@ -357,13 +357,13 @@ def get_vyos_as_path(asn):
             f"AS-SET of AS{asn} contains AS0, this session will be shutdown."
         )
         bad_asn_set.add(asn)
-        return full_vyos_cmd
+
     if asn not in as_tier1 and (set(cone_list) & set(as_tier1)):
         warnings.append(
             f"AS-SET of AS{asn} contains Tier1 AS, this session will be shutdown."
         )
         bad_asn_set.add(asn)
-        return full_vyos_cmd
+
     cone_list = [str(x) for x in cone_list]
 
     if len(cone_list) + 1 > config["as-set-limit"]["member-limit"]:
@@ -665,7 +665,7 @@ def get_bgp_neighbor_cmd(
             )
         bgp_cmd += f"""
         delete protocols bgp neighbor {neighbor_address}
-        {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or asn in bad_asn_set) else ""}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in bad_asn_set and not ("keepup" in neighbor and neighbor["keepup"]))) else ""}
         {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
         set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"{neighbor_type}: {as_name_map[asn]}"}'
         set protocols bgp neighbor {neighbor_address} graceful-restart enable
