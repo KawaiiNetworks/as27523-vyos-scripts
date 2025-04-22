@@ -50,6 +50,9 @@ cone_prefix_matrix_map = {}
 neighbor_id_hashmap = {}
 """neighbor_id:neighbor_str"""
 
+bad_asn_set = set()
+"""to storage bad asn when get as info from bgpq4, like containing AS0 in as-set, or have large cone but not tagged"""
+
 warnings = []
 
 as_tier1 = [
@@ -353,38 +356,38 @@ def get_vyos_as_path(asn):
         warnings.append(
             f"AS-SET of AS{asn} contains AS0, this session will be shutdown."
         )
+        bad_asn_set.add(asn)
         return full_vyos_cmd
     if asn not in as_tier1 and (set(cone_list) & set(as_tier1)):
         warnings.append(
             f"AS-SET of AS{asn} contains Tier1 AS, this session will be shutdown."
         )
+        bad_asn_set.add(asn)
         return full_vyos_cmd
     cone_list = [str(x) for x in cone_list]
 
-    if len(cone_list) + 1 > config["as-set"]["member-limit"]:
-        if config["as-set"]["limit-violation"] == "accept":
+    if len(cone_list) + 1 > config["as-set-limit"]["member-limit"]:
+        if asn in config["as-set-limit"]["large-as-list"]:
             full_vyos_cmd += f"""
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
             """
             warnings.append(
-                f"AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will accept all as-path."
+                f"AS{asn} cone number is {len(cone_list)+1}, filter will accept all as-path."
             )
-            return full_vyos_cmd
-        elif config["as-set"]["limit-violation"] == "deny":
-            warnings.append(
-                f"AS{asn} as-path filter generated. But cone number is {len(cone_list)+1}, filter will deny all as-path."
-            )
-            return full_vyos_cmd
         else:
-            raise ValueError("as-set limit-violation must be accept, deny")
+            warnings.append(
+                f"AS{asn} cone number is {len(cone_list)+1} and asn not in large-as-list, this session will be shutdown."
+            )
+            bad_asn_set.add(asn)
+    else:
+        if len(cone_list) > 0:
+            for i in range(0, len(cone_list), 20):
+                full_vyos_cmd += f"""
+                set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} action permit
+                set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} regex '^{asn}(_[0-9]+)*_({"|".join(cone_list[i:i+20 if i+20 < len(cone_list) else len(cone_list)])})$'
+                """
 
-    if len(cone_list) > 0:
-        for i in range(0, len(cone_list), 20):
-            full_vyos_cmd += f"""
-            set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} action permit
-            set policy as-path-list AUTOGEN-AS{asn}-IN rule {20+i} regex '^{asn}(_[0-9]+)*_({"|".join(cone_list[i:i+20 if i+20 < len(cone_list) else len(cone_list)])})$'
-            """
     print(f"AS{asn} as-path filter generated.")
     return full_vyos_cmd
 
@@ -400,28 +403,6 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
         set policy {pl} {fn} rule {rule} ge {ge}
         set policy {pl} {fn} rule {rule} le {max_length if max_length else le}
         """
-
-    def vyos_cmd_when_limit_violation(pl, fn, prefix_count):
-        if config["as-set"]["limit-violation"] == "accept":
-            warnings.append(
-                f"AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will accept all prefix."
-            )
-            return f"""
-            set policy {pl} {fn} rule 10 action permit
-            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
-            set policy {pl} {fn} rule 10 le {24 if ipversion == 4 else 48}
-            """
-        elif config["as-set"]["limit-violation"] == "deny":
-            warnings.append(
-                f"AS{asn} {'cone' if cone else ''} prefix{ipversion} list generated. But prefix number({prefix_count}) is too large, filter will deny all prefix."
-            )
-            return f"""
-            set policy {pl} {fn} rule 10 action deny
-            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
-            set policy {pl} {fn} rule 10 le {32 if ipversion == 4 else 128}
-            """
-        else:
-            raise ValueError("as-set limit-violation must be accept, deny")
 
     if cone:
         fn = filter_name if filter_name else f"AUTOGEN-AS{asn}-CONE"
@@ -451,8 +432,26 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
         warnings.append(
             f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} list generated. But no prefix in list."
         )
-    elif len(prefix_matrix) > config["as-set"]["prefix-limit"]:
-        full_vyos_cmd += vyos_cmd_when_limit_violation(pl, fn, len(prefix_matrix))
+    elif len(prefix_matrix) > config["as-set-limit"]["prefix-limit"]:
+        if asn in config["as-set-limit"]["large-as-list"]:
+            full_vyos_cmd += f"""
+            set policy {pl} {fn} rule 10 action permit
+            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
+            set policy {pl} {fn} rule 10 le {24 if ipversion == 4 else 48}
+            """
+            warnings.append(
+                f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} number({len(prefix_matrix)}) is too large, filter will accept all prefix."
+            )
+        else:
+            full_vyos_cmd += f"""
+            set policy {pl} {fn} rule 10 action deny
+            set policy {pl} {fn} rule 10 prefix {"0.0.0.0/0" if ipversion == 4 else "::/0"}
+            set policy {pl} {fn} rule 10 le {32 if ipversion == 4 else 128}
+            """
+            warnings.append(
+                f"AS{asn} {'cone ' if cone else ''}prefix{ipversion} number({len(prefix_matrix)}) is too large, and asn not in large-as-list, this session will be shutdown."
+            )
+            bad_asn_set.add(asn)
     else:
         c = 1
         for prefix in prefix_matrix:
@@ -666,7 +665,7 @@ def get_bgp_neighbor_cmd(
             )
         bgp_cmd += f"""
         delete protocols bgp neighbor {neighbor_address}
-        {f"set protocols bgp neighbor {neighbor_address} shutdown" if ("shutdown" in neighbor and neighbor["shutdown"]) else ""}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or asn in bad_asn_set) else ""}
         {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
         set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"{neighbor_type}: {as_name_map[asn]}"}'
         set protocols bgp neighbor {neighbor_address} graceful-restart enable
@@ -1123,3 +1122,5 @@ if __name__ == "__main__":
     print("All done. Below is the warnings: ----------------------------------")
     for w in warnings:
         print(w)
+    print("Please note that there are issues with these ASNs: ----------------")
+    print(bad_asn_set)
