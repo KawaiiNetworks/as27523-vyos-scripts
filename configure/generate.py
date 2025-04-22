@@ -9,6 +9,7 @@ import hashlib
 import requests
 import yaml
 import dns.resolver
+from aggregate_prefixes import aggregate_prefixes
 
 work_dir = os.path.dirname(os.path.abspath(__file__))
 github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
@@ -222,13 +223,29 @@ def get_as_set_member(asset_name):
     return res
 
 
+def aggregate_prefixes_modified(prefix_matrix, ipversion):
+    """use aggregate_prefixes to aggregate prefix list, ignore ge, le"""
+
+    def _convert(p_str):
+        _p = p_str.split("/")
+        return (
+            (_p[0], _p[1], _p[1], "24")
+            if ipversion == 4
+            else (_p[0], _p[1], _p[1], "48")
+        )
+
+    _prefixes = [f"{p[0]/p[1]}" for p in prefix_matrix]
+    _prefixes = list(aggregate_prefixes(_prefixes))
+    return [_convert(p) for p in _prefixes]
+
+
 def get_prefix_matrix(ipversion, asn):
     """use bgpq4 to get prefix matrix"""
 
     if (ipversion, asn) in prefix_matrix_map:
         return deepcopy(prefix_matrix_map[(ipversion, asn)])
 
-    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" as{asn} -l AS{asn}'
+    cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" as{asn} -l AS{asn}'  # network, length, ge, le (example: 1.1.0.0, 16, 20, 24)
     prefix_matrix = []
 
     result = subprocess.run(
@@ -244,7 +261,9 @@ def get_prefix_matrix(ipversion, asn):
     for line in res:
         prefix_matrix.append(tuple(line.split(",")))
 
-    prefix_matrix_map[(ipversion, asn)] = prefix_matrix
+    prefix_matrix_map[(ipversion, asn)] = aggregate_prefixes_modified(
+        prefix_matrix, ipversion
+    )
     print(f"AS{asn} prefix{ipversion} matrix generated.")
     return deepcopy(prefix_matrix)
 
@@ -258,7 +277,7 @@ def get_cone_prefix_matrix(ipversion, asn):
     asset_name_list = get_asset_name(asn)
     cone_prefix_matrix = []
     for asset_name in asset_name_list:
-        cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" {asset_name}'
+        cmd = rf'bgpq4 -S RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB -{ipversion} -A -F "%n,%l,%a,%A\n" {asset_name}'  # network, length, ge, le (example: 1.1.0.0, 16, 20, 24)
         result = subprocess.run(
             cmd,
             shell=True,
@@ -273,7 +292,9 @@ def get_cone_prefix_matrix(ipversion, asn):
             cone_prefix_matrix.append(tuple(line.split(",")))
 
     cone_prefix_matrix = sorted(list(set(cone_prefix_matrix)))
-    cone_prefix_matrix_map[(ipversion, asn)] = cone_prefix_matrix
+    cone_prefix_matrix_map[(ipversion, asn)] = aggregate_prefixes_modified(
+        cone_prefix_matrix, ipversion
+    )
     print(f"AS{asn} cone prefix{ipversion} matrix generated.")
     return deepcopy(cone_prefix_matrix)
 
@@ -1094,22 +1115,22 @@ if __name__ == "__main__":
             os.path.join(work_dir, "outputs", f"configure.{router['name']}.sh"),
             "w",
             encoding="utf-8",
-        ) as f:
-            f.write(script)
+        ) as f_txt:
+            f_txt.write(script)
         print(f"configure.{router['name']}.sh generated.")
 
     with open(
         os.path.join(work_dir, "outputs", "defaultconfig.sh"),
         "w",
         encoding="utf-8",
-    ) as f:
-        f.write(defaultconfig)
+    ) as f_txt:
+        f_txt.write(defaultconfig)
 
     with open(
         os.path.join(work_dir, "outputs", "find_unused.py"),
         "w",
         encoding="utf-8",
-    ) as f:
+    ) as f_txt:
         find_unused_template = open(
             os.path.join(work_dir, "find_unused.py"), "r", encoding="utf-8"
         ).read()
@@ -1117,7 +1138,7 @@ if __name__ == "__main__":
             r"${default_config_url}",
             f"https://github.com/{github_user}/{github_repo}/releases/download/nightly/defaultconfig.sh",
         )
-        f.write(find_unused_template)
+        f_txt.write(find_unused_template)
 
     print("All done. Below is the warnings: ----------------------------------")
     for w in warnings:
