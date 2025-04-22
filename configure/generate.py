@@ -261,9 +261,9 @@ def get_prefix_matrix(ipversion, asn):
     for line in res:
         prefix_matrix.append(tuple(line.split(",")))
 
-    prefix_matrix_map[(ipversion, asn)] = aggregate_prefixes_modified(
-        prefix_matrix, ipversion
-    )
+    prefix_matrix = aggregate_prefixes_modified(prefix_matrix, ipversion)
+
+    prefix_matrix_map[(ipversion, asn)] = prefix_matrix
     print(f"AS{asn} prefix{ipversion} matrix generated.")
     return deepcopy(prefix_matrix)
 
@@ -292,9 +292,8 @@ def get_cone_prefix_matrix(ipversion, asn):
             cone_prefix_matrix.append(tuple(line.split(",")))
 
     cone_prefix_matrix = sorted(list(set(cone_prefix_matrix)))
-    cone_prefix_matrix_map[(ipversion, asn)] = aggregate_prefixes_modified(
-        cone_prefix_matrix, ipversion
-    )
+    cone_prefix_matrix = aggregate_prefixes_modified(cone_prefix_matrix, ipversion)
+    cone_prefix_matrix_map[(ipversion, asn)] = cone_prefix_matrix
     print(f"AS{asn} cone prefix{ipversion} matrix generated.")
     return deepcopy(cone_prefix_matrix)
 
