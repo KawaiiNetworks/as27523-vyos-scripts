@@ -234,7 +234,7 @@ def aggregate_prefixes_modified(prefix_matrix, ipversion):
             else (_p[0], _p[1], _p[1], "48")
         )
 
-    _prefixes = [f"{p[0]/p[1]}" for p in prefix_matrix]
+    _prefixes = [f"{p[0]}/{p[1]}" for p in prefix_matrix]
     _prefixes = list(aggregate_prefixes(_prefixes))
     return [_convert(p) for p in _prefixes]
 
