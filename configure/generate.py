@@ -380,7 +380,7 @@ def get_vyos_as_path(asn):
 
     if asn not in as_tier1 and (set(cone_list) & set(as_tier1)):
         warnings.append(
-            f"AS-SET of AS{asn} contains Tier1 AS, this session will be shutdown."
+            f"AS-SET of AS{asn} contains Tier1 AS {(set(cone_list) & set(as_tier1))}, this session will be shutdown."
         )
         bad_asn_set.add(asn)
 
