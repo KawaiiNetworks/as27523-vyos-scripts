@@ -14,7 +14,7 @@ from aggregate_prefixes import aggregate_prefixes
 work_dir = os.path.dirname(os.path.abspath(__file__))
 github_user = os.getenv("GITHUB_REPOSITORY").split("/")[0]
 github_repo = os.getenv("GITHUB_REPOSITORY").split("/")[-1]
-local_asn = re.search(r"as(\d+)", github_repo.lower()).group(1)
+local_asn = int(re.search(r"as(\d+)", github_repo.lower()).group(1))
 config = yaml.safe_load(
     requests.get(
         f"https://raw.githubusercontent.com/{github_user}/AS{local_asn}/main/network/vyos/vyos.yaml",
@@ -685,7 +685,7 @@ def get_bgp_neighbor_cmd(
             )
         bgp_cmd += f"""
         delete protocols bgp neighbor {neighbor_address}
-        {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in bad_asn_set and not ("keepup" in neighbor and neighbor["keepup"]))) else ""}
+        {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in bad_asn_set and asn not in config["keepup-as-list"] )) else ""}
         {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
         set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"{neighbor_type}: {as_name_map[asn]}"}'
         set protocols bgp neighbor {neighbor_address} graceful-restart enable
