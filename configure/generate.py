@@ -1062,12 +1062,12 @@ def get_final_vyos_cmd(router_config):
     configure = (
         "\nconfigure\n"
         + defaultconfig
+        + configure
         + (
             router_config["custom-config"] + "\n"
             if "custom-config" in router_config
             else ""
         )
-        + configure
         + "\necho 'configure done'\n"
         + '\nvtysh -c "watchfrr ignore bgpd"\n'  # watchfrr ignore bgpd so bgpd won't be killed when it hasn't response in 90s
         + "\ncommit\n"
