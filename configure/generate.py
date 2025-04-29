@@ -683,6 +683,18 @@ def get_bgp_neighbor_cmd(
                 if ipversion == 4
                 else maximum_prefix_map[local_asn][1]
             )
+
+        if "default-originate" in neighbor and neighbor["default-originate"]:
+            route_map_out_name_adopted = "AUTOGEN-REJECT-ALL"
+        elif (
+            neighbor_type == "IBGP"
+            and "simple-out" in neighbor
+            and neighbor["simple-out"]
+        ):
+            route_map_out_name_adopted = "AUTOGEN-SIMPLE-IBGP-OUT"
+        else:
+            route_map_out_name_adopted = route_map_out_name
+
         bgp_cmd += f"""
         delete protocols bgp neighbor {neighbor_address}
         {f"set protocols bgp neighbor {neighbor_address} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in bad_asn_set and asn not in config["keepup-as-list"] )) else ""}
@@ -697,6 +709,7 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} interface source-interface {neighbor['update-source']}" if not isIP(neighbor["update-source"]) and not multihop else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
+        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"delete protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
@@ -704,7 +717,7 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
         {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {"AUTOGEN-SIMPLE-IBGP-OUT" if (neighbor_type=="IBGP" and "simple-out" in neighbor and neighbor["simple-out"]) else route_map_out_name}
+        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name_adopted}
         set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
         {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
         """
