@@ -566,9 +566,14 @@ def get_vyos_route_map_redistribute(redistribute):
         set policy route-map AUTOGEN-Redistribute rule {r} match {c["match"]}
         """
         if "set" in c:
-            f += f"""
-            set policy route-map AUTOGEN-Redistribute rule {r} set {c["set"]}
-            """
+            if not isinstance(c["set"], list):
+                set_list = [c["set"]]
+            else:
+                set_list = c["set"]
+            for r_set in set_list:
+                f += f"""
+                set policy route-map AUTOGEN-Redistribute rule {r} set {r_set}
+                """
         # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
         if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
             f += f"""
@@ -601,9 +606,14 @@ def vyos_pre_accept_filter(route_map_name, r, c):
         set policy route-map {route_map_name} rule {r} match {c["match"]}
         """
     if "set" in c:
-        cmd += f"""
-        set policy route-map {route_map_name} rule {r} set {c["set"]}
-        """
+        if not isinstance(c["set"], list):
+            set_list = [c["set"]]
+        else:
+            set_list = c["set"]
+        for r_set in set_list:
+            cmd += f"""
+            set policy route-map {route_map_name} rule {r} set {r_set}
+            """
     if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
         cmd += f"""
         set policy route-map {route_map_name} rule {r} on-match next
