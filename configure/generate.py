@@ -783,6 +783,26 @@ def get_bgp_neighbor_cmd(
                         route_map_in_name,
                         route_map_out_name_adopted,
                     )
+            else:
+                # default to both ipv4 and ipv6
+                bgp_cmd += get_bgp_neighbor_address_family_cmd(
+                    4,
+                    asn,
+                    neighbor_address,
+                    neighbor,
+                    neighbor_type,
+                    route_map_in_name,
+                    route_map_out_name_adopted,
+                )
+                bgp_cmd += get_bgp_neighbor_address_family_cmd(
+                    6,
+                    asn,
+                    neighbor_address,
+                    neighbor,
+                    neighbor_type,
+                    route_map_in_name,
+                    route_map_out_name_adopted,
+                )
 
     return bgp_cmd
 
