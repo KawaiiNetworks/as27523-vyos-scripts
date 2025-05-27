@@ -660,6 +660,43 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
     return f
 
 
+def get_bgp_neighbor_address_family_cmd(
+    ipversion,
+    asn,
+    neighbor_address,
+    neighbor,
+    neighbor_type,
+    route_map_in_name,
+    route_map_out_name_adopted,
+):
+    maximum_prefix = -1  # 定义一下避免出现未引用错误，实际上不可能发生
+    maximum_prefix_out = -1
+    if neighbor_type in ["Peer", "Downstream"]:
+        maximum_prefix = (
+            maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
+        )
+    if neighbor_type in ["Upstream", "RouteServer", "Peer"]:
+        maximum_prefix_out = (
+            maximum_prefix_map[local_asn][0]
+            if ipversion == 4
+            else maximum_prefix_map[local_asn][1]
+        )
+
+    return f"""
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
+    {f"delete protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name_adopted}
+    set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
+    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
+    """
+
+
 def get_bgp_neighbor_cmd(
     neighbor, neighbor_type, route_map_in_name, route_map_out_name
 ):
@@ -678,22 +715,6 @@ def get_bgp_neighbor_cmd(
 
     bgp_cmd = ""
     for neighbor_address in neighbor_address_list:
-        ipversion = ipaddress.ip_address(neighbor_address).version
-        maximum_prefix = -1  # 定义一下避免出现未引用错误，实际上不可能发生
-        maximum_prefix_out = -1
-        if neighbor_type in ["Peer", "Downstream"]:
-            maximum_prefix = (
-                maximum_prefix_map[asn][0]
-                if ipversion == 4
-                else maximum_prefix_map[asn][1]
-            )
-        if neighbor_type in ["Upstream", "RouteServer", "Peer"]:
-            maximum_prefix_out = (
-                maximum_prefix_map[local_asn][0]
-                if ipversion == 4
-                else maximum_prefix_map[local_asn][1]
-            )
-
         if "default-originate" in neighbor and neighbor["default-originate"]:
             route_map_out_name_adopted = "AUTOGEN-REJECT-ALL"
         elif (
@@ -711,26 +732,57 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
         set protocols bgp neighbor {neighbor_address} description '{neighbor["description"] if "description" in neighbor else f"{neighbor_type}: {as_name_map[asn]}"}'
         set protocols bgp neighbor {neighbor_address} graceful-restart enable
-        set protocols bgp neighbor {neighbor_address} remote-as {asn}
+        {f"set protocols bgp neighbor {neighbor_address} remote-as {asn}" if isIP(neighbor_address) else f"set protocols bgp neighbor {neighbor_address} interface remote-as {asn}"}
         {f"set protocols bgp neighbor {neighbor_address} password '{password}'" if password else ""}
         {f"set protocols bgp neighbor {neighbor_address} ebgp-multihop {multihop}" if multihop else ""}
         set protocols bgp neighbor {neighbor_address} solo
         set protocols bgp neighbor {neighbor_address} update-source {neighbor["update-source"]}
-        {f"set protocols bgp neighbor {neighbor_address} interface source-interface {neighbor['update-source']}" if not isIP(neighbor["update-source"]) and not multihop else ""}
+        {f"set protocols bgp neighbor {neighbor_address} interface source-interface {neighbor['update-source']}" if isIP(neighbor_address) and not isIP(neighbor["update-source"]) and not multihop else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
         {f"set protocols bgp neighbor {neighbor_address} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
-        {f"delete protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
-        {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map export {route_map_out_name_adopted}
-        set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast route-map import {route_map_in_name}
-        {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
+        {f"set protocols bgp neighbor {neighbor_address} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
         """
+
+        if isIP(neighbor_address):
+            ipversion = ipaddress.ip_address(neighbor_address).version
+            bgp_cmd += get_bgp_neighbor_address_family_cmd(
+                ipversion,
+                asn,
+                neighbor_address,
+                neighbor,
+                neighbor_type,
+                route_map_in_name,
+                route_map_out_name_adopted,
+            )
+        else:
+            # neighbor_address is an interface name
+            if "address-family" in neighbor:
+                if (
+                    "ipv4" in neighbor["address-family"]
+                    and neighbor["address-family"]["ipv4"]
+                ):
+                    bgp_cmd += get_bgp_neighbor_address_family_cmd(
+                        4,
+                        asn,
+                        neighbor_address,
+                        neighbor,
+                        neighbor_type,
+                        route_map_in_name,
+                        route_map_out_name_adopted,
+                    )
+                if (
+                    "ipv6" in neighbor["address-family"]
+                    and neighbor["address-family"]["ipv6"]
+                ):
+                    bgp_cmd += get_bgp_neighbor_address_family_cmd(
+                        6,
+                        asn,
+                        neighbor_address,
+                        neighbor,
+                        neighbor_type,
+                        route_map_in_name,
+                        route_map_out_name_adopted,
+                    )
 
     return bgp_cmd
 

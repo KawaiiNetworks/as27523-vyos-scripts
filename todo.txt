@@ -4,3 +4,4 @@ reject tier1 in as path from peer 已完成
 large asn verify 替代 limit-violaion 已完成
 aggregate prefixes and permit longer prefix included in IRR 已完成
 blackhole 要求做到即使长于24和48的路由只要带了黑洞community能被接收，本地blackhole的路由即使长也能被自动加community发送
+extended-nexthop 用来简化wg接口的配置，允许不设置任何ip进行bgp连接，同时允许neighbor-address设置为interface name，并自动判断设置ipvx-unicast
