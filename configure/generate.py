@@ -152,12 +152,15 @@ def get_as_info(asn):
     """use peeringdb to get as info"""
 
     if validateASN(asn) == 0:
+        as_name_map[asn] = f"Private AS{asn}"
+        asset_name_map[asn] = [f"AS{asn}"]
+        maximum_prefix_map[asn] = [100, 100]  # maximum_prefix for private ASN
         return 0
     elif validateASN(asn) != 1:
         raise ValueError(f"Invalid ASN: {asn}")
 
     if asn in as_name_map:
-        return 1
+        return validateASN(asn)
 
     time.sleep(5)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
