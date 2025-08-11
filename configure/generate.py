@@ -756,6 +756,9 @@ def get_bgp_neighbor_cmd(
 
     bgp_cmd = ""
 
+    if validateASN(asn) != 1 and "prefix-list" not in neighbor:
+        neighbor["prefix-list"] = []
+
     if "prefix-list" in neighbor:
         # If set this, The default AUTOGEN-AS{asn}-CONE / AUTOGEN-AS{asn} will be ignored
         neighbor_id = get_neighbor_id(neighbor)
