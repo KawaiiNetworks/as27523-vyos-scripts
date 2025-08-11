@@ -115,11 +115,49 @@ def isIP(ipstr):
         return False
 
 
+def validateASN(asn):
+    if 1 <= int(asn) <= 23455:
+        return 1
+    elif int(asn) == 23456:
+        # Reserved for AS Pool Transition
+        return 2
+    elif 23457 <= int(asn) <= 64495:
+        return 1
+    elif 64496 <= int(asn) <= 64511:
+        # Reserved for use in documentation and sample code
+        return 3
+    elif 64512 <= int(asn) <= 65534:
+        # Reserved for private use
+        return 0
+    elif int(asn) == 65535:
+        # Reserved
+        return 4
+    elif 65536 <= int(asn) <= 65551:
+        # Reserved for use in documentation and sample code
+        return 3
+    elif 65552 <= int(asn) <= 131071:
+        # Reserved
+        return 5
+    elif 131072 <= int(asn) <= 4199999999:
+        return 1
+    elif 4200000000 <= int(asn) <= 4294967294:
+        # Reserved for private use
+        return 0
+    elif int(asn) == 4294967295:
+        # Reserved
+        return 4
+
+
 def get_as_info(asn):
     """use peeringdb to get as info"""
 
+    if validateASN(asn) == 0:
+        return 0
+    elif validateASN(asn) != 1:
+        raise ValueError(f"Invalid ASN: {asn}")
+
     if asn in as_name_map:
-        return
+        return 1
 
     time.sleep(5)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
@@ -156,6 +194,7 @@ def get_as_info(asn):
 
     asset_name_map[asn] = as_set_name_list
     print(f"AS{asn} as-set name: {as_set_name_list}")
+    return 1
 
 
 def get_vyos_as_community(asn):
@@ -671,6 +710,7 @@ def get_bgp_neighbor_address_family_cmd(
 ):
     maximum_prefix = -1  # 定义一下避免出现未引用错误，实际上不可能发生
     maximum_prefix_out = -1
+    asn_type = validateASN(asn)
     if neighbor_type in ["Peer", "Downstream"]:
         maximum_prefix = (
             maximum_prefix_map[asn][0] if ipversion == 4 else maximum_prefix_map[asn][1]
@@ -687,7 +727,8 @@ def get_bgp_neighbor_address_family_cmd(
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
     {f"delete protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
-    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-{get_neighbor_id(neighbor)}" if "prefix-list" in neighbor else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] and asn_type ==1 else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if neighbor_type in ["Peer", "Downstream"] else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if neighbor_type in ["Upstream", "RouteServer", "Peer"] else ""}
     set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast nexthop-self force
@@ -714,6 +755,35 @@ def get_bgp_neighbor_cmd(
         neighbor_address_list = [neighbor_address_list]
 
     bgp_cmd = ""
+
+    if "prefix-list" in neighbor:
+        # If set this, The default AUTOGEN-AS{asn}-CONE / AUTOGEN-AS{asn} will be ignored
+        neighbor_id = get_neighbor_id(neighbor)
+        bgp_cmd += f"""
+        delete policy prefix-list AUTOGEN-AS{asn}-{neighbor_id}
+        set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule 10000 action deny
+        set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule 10000 prefix 0.0.0.0/0
+        set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule 10000 ge 0
+        set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule 10000 le 32
+        delete policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id}
+        set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule 10000 action deny
+        set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule 10000 prefix ::/0
+        set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule 10000 ge 0
+        set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule 10000 le 128
+        """
+        for prefix_list_count, ip_str in enumerate(neighbor["prefix-list"], start=1):
+            _tmp_net = ipaddress.ip_network(ip_str)
+            if _tmp_net.version == 4:
+                bgp_cmd += f"""
+                set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule {prefix_list_count} action permit
+                set policy prefix-list AUTOGEN-AS{asn}-{neighbor_id} rule {prefix_list_count} prefix {ip_str}
+                """
+            else:
+                bgp_cmd += f"""
+                set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule {prefix_list_count} action permit
+                set policy prefix-list6 AUTOGEN-AS{asn}-{neighbor_id} rule {prefix_list_count} prefix {ip_str}
+                """
+
     for neighbor_address in neighbor_address_list:
         if "default-originate" in neighbor and neighbor["default-originate"]:
             route_map_out_name_adopted = "AUTOGEN-REJECT-ALL"
@@ -817,6 +887,10 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     else:
         asn = neighbor["asn"]
 
+    asn_type = validateASN(asn)
+    if asn_type != 1 and neighbor_type != "Downstream":
+        raise ValueError(f"Private ASN {asn} must be Downstream")
+
     if neighbor_type == "IBGP":
         route_map_in_name = f"AUTOGEN-IBGP-IN-{neighbor_id}"
         route_map_out_name = f"AUTOGEN-IBGP-OUT-{neighbor_id}"
@@ -826,10 +900,11 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
             f"AUTOGEN-AS{asn}-{neighbor_type.upper()}-OUT-{neighbor_id}"
         )
 
-    final_filter = f"""
+    final_filter = ""
+    final_filter += f"""
     delete policy route-map {route_map_in_name}
     set policy route-map {route_map_in_name} rule 10 action permit
-    set policy route-map {route_map_in_name} rule 10 call AUTOGEN-{neighbor_type.upper()}-IN
+    {f"set policy route-map {route_map_in_name} rule 10 call AUTOGEN-{neighbor_type.upper()}-IN" if asn_type == 1 else f"set policy route-map {route_map_in_name} rule 10 set as-path exclude all"}
     set policy route-map {route_map_in_name} rule 10 on-match next
     # rule 100 for setting attribute like local-pref, metric
     set policy route-map {route_map_in_name} rule 100 action permit
@@ -841,7 +916,8 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     set policy route-map {route_map_in_name} rule 200 on-match next
     # rule 1000-9999 for pre-import-accept in config
     set policy route-map {route_map_in_name} rule 10000 action permit
-
+    """
+    final_filter += f"""
     delete policy route-map {route_map_out_name}
     set policy route-map {route_map_out_name} rule 10 action permit
     set policy route-map {route_map_out_name} rule 10 call AUTOGEN-{neighbor_type.upper()}-OUT
@@ -849,6 +925,10 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     # rule 100 for controling like prepend
     set policy route-map {route_map_out_name} rule 100 action permit
     set policy route-map {route_map_out_name} rule 100 on-match next
+    """
+    # This disable others ability to control their prefixes to private ASN
+    final_filter += (
+        f"""
     # rule 200-999 for this code
     set policy route-map {route_map_out_name} rule 200 action deny
     set policy route-map {route_map_out_name} rule 200 match large-community large-community-list AUTOGEN-DNA-ANY
@@ -873,7 +953,16 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     set policy route-map {route_map_out_name} rule 402 set as-path prepend-last-as 2
     set policy route-map {route_map_out_name} rule 402 on-match next
     # rule 1000-9999 for pre-export-accept in config
+    """
+        if asn_type == 1
+        else ""
+    )
+    final_filter += f"""
     set policy route-map {route_map_out_name} rule 10000 action permit
+    """
+    # This disable others ability to control their prefixes to private ASN
+    final_filter += (
+        f"""
 
     delete policy large-community-list AUTOGEN-DNA-NID{neighbor_id}
     set policy large-community-list AUTOGEN-DNA-NID{neighbor_id} rule 10 action 'permit'
@@ -882,6 +971,9 @@ def get_vyos_protocol_bgp_neighbor(neighbor_type, neighbor):
     set policy large-community-list AUTOGEN-OLA-NID{neighbor_id} rule 10 action 'permit'
     set policy large-community-list AUTOGEN-OLA-NID{neighbor_id} rule 10 regex "{local_asn}:1101:{neighbor_id}"
     """
+        if asn_type == 1
+        else ""
+    )
 
     final_filter += vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name)
     final_filter += vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name)
@@ -1087,8 +1179,9 @@ def get_final_vyos_cmd(router_config):
         local_asn
     )  # 权宜之计，实际上ibgp不该能这样操控？
     for asn in connected_asns:
-        get_as_info(asn)
-        configure += get_vyos_as_community(asn)
+        asn_type = get_as_info(asn)
+        if asn_type == 1:
+            configure += get_vyos_as_community(asn)
 
     # local asn prefix list
     # configure += get_vyos_prefix_list(
@@ -1112,7 +1205,8 @@ def get_final_vyos_cmd(router_config):
 
     # we only need to generate filter for peer and downstream
     for asn in sorted(list(set(peer_asns + downstream_asns))):
-        configure += get_vyos_as_filter(asn)
+        if validateASN(asn) == 1:
+            configure += get_vyos_as_filter(asn)
 
     # protocol rpki
     configure += get_vyos_protocol_rpki(router_config["protocols"]["rpki"])
