@@ -728,7 +728,7 @@ def get_bgp_neighbor_address_family_cmd(
     return f"""
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
-    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] else ""}
+    {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if neighbor_type in ["Peer", "Downstream"] and asn_type==1 else ""}
     {f"delete protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-{get_neighbor_id(neighbor)}" if "prefix-list" in neighbor else ""}
     {f"set protocols bgp neighbor {neighbor_address} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if neighbor_type in ["Peer", "Downstream"] and asn_type ==1 else ""}
