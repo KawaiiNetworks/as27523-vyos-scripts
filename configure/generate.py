@@ -171,10 +171,10 @@ def get_as_info(asn):
         response["info_prefixes4"],
         response["info_prefixes6"],
     ]
-    if maximum_prefix_map[asn][0] == 0:
+    if maximum_prefix_map[asn][0] == 0 or maximum_prefix_map[asn][0] is None:
         warnings.append(f"AS{asn} maximum-prefix4 is 0, change to 1")
         maximum_prefix_map[asn][0] = 1
-    if maximum_prefix_map[asn][1] == 0:
+    if maximum_prefix_map[asn][1] == 0 or maximum_prefix_map[asn][1] is None:
         warnings.append(f"AS{asn} maximum-prefix6 is 0, change to 1")
         maximum_prefix_map[asn][1] = 1
 
