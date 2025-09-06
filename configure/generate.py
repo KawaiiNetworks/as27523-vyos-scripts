@@ -819,7 +819,10 @@ def get_bgp_neighbor_cmd(
         {f"set protocols bgp neighbor {neighbor_address} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
         """
 
-        if isIP(neighbor_address):
+        if isIP(neighbor_address) and not (
+            "extended-nexthop" in neighbor and neighbor["extended-nexthop"]
+        ):
+            # isIP and not extended-nexthop
             ipversion = ipaddress.ip_address(neighbor_address).version
             bgp_cmd += get_bgp_neighbor_address_family_cmd(
                 ipversion,
@@ -831,7 +834,7 @@ def get_bgp_neighbor_cmd(
                 route_map_out_name_adopted,
             )
         else:
-            # neighbor_address is an interface name
+            # neighbor_address is an interface name or extended-nexthop enabled
             if "address-family" in neighbor:
                 if (
                     "ipv4" in neighbor["address-family"]
