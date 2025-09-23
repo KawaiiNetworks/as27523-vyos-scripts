@@ -676,6 +676,11 @@ def vyos_neighbor_in_optional_attributes(neighbor, route_map_in_name):
         set policy route-map {route_map_in_name} rule 100 set metric {neighbor["metric"]}
         """
 
+    if "in-prepend" in neighbor:
+        f += f"""
+        set policy route-map {route_map_in_name} rule 100 set as-path prepend '{neighbor["in-prepend"]}'
+        """
+
     if "pre-import-accept" in neighbor:
         r = 1000
         for c in neighbor["pre-import-accept"]:
@@ -1030,6 +1035,12 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
         if "manual" in downstream_neighbor and downstream_neighbor["manual"]:
             continue
         cmd += get_vyos_protocol_bgp_neighbor("Downstream", downstream_neighbor)
+
+    if "parameters" in bgp_config:
+        for param in bgp_config["parameters"]:
+            cmd += f"""
+            set protocols bgp parameters {param}
+            """
 
     return cmd
 
