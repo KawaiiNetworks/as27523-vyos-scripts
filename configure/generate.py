@@ -693,9 +693,9 @@ def vyos_neighbor_out_optional_attributes(neighbor, route_map_out_name):
     """cmd to configure vyos neighbor optional attributes"""
 
     f = ""
-    if "prepend" in neighbor:
+    if "out-prepend" in neighbor:
         f += f"""
-        set policy route-map {route_map_out_name} rule 100 set as-path prepend '{neighbor["prepend"]}'
+        set policy route-map {route_map_out_name} rule 100 set as-path prepend '{neighbor["out-prepend"]}'
         """
 
     if "pre-export-accept" in neighbor:
