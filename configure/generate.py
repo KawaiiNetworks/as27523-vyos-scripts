@@ -598,6 +598,10 @@ def get_vyos_route_map_redistribute(redistribute):
     set protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
     set protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
     delete policy route-map AUTOGEN-Redistribute
+    set policy route-map AUTOGEN-Redistribute rule 10 action permit
+    set policy route-map AUTOGEN-Redistribute rule 10 match ip address prefix-list AUTOGEN-LOCAL-ASN-PREFIX4
+    set policy route-map AUTOGEN-Redistribute rule 20 action permit
+    set policy route-map AUTOGEN-Redistribute rule 20 match ipv6 address prefix-list AUTOGEN-LOCAL-ASN-PREFIX6
     set policy route-map AUTOGEN-Redistribute rule 10000 action permit
     """
 
@@ -1241,6 +1245,8 @@ def get_final_vyos_cmd(router_config):
     # redistribute
     if "redistribute" in router_config:
         configure += get_vyos_route_map_redistribute(router_config["redistribute"])
+    else:
+        configure += get_vyos_route_map_redistribute([])
 
     # system frr
     configure += get_vyos_system_frr()

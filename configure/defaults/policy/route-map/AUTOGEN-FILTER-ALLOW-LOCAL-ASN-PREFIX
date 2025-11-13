@@ -1,5 +1,0 @@
-delete policy route-map AUTOGEN-FILTER-ALLOW-LOCAL-ASN-PREFIX
-set policy route-map AUTOGEN-FILTER-ALLOW-LOCAL-ASN-PREFIX rule 10 action 'permit'
-set policy route-map AUTOGEN-FILTER-ALLOW-LOCAL-ASN-PREFIX rule 10 match ip address prefix-list 'AUTOGEN-LOCAL-ASN-PREFIX4'
-set policy route-map AUTOGEN-FILTER-ALLOW-LOCAL-ASN-PREFIX rule 20 action 'permit'
-set policy route-map AUTOGEN-FILTER-ALLOW-LOCAL-ASN-PREFIX rule 20 match ipv6 address prefix-list 'AUTOGEN-LOCAL-ASN-PREFIX6'
