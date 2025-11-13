@@ -592,7 +592,9 @@ def get_vyos_policy(policy):
 def get_vyos_route_map_redistribute(redistribute):
     """cmd to configure vyos route-map redistribute"""
 
-    f = """
+    r_pre_filter = 100
+    r_pre_accept = 1000
+    f = f"""
     set protocols bgp address-family ipv4-unicast redistribute connected route-map AUTOGEN-Redistribute
     set protocols bgp address-family ipv4-unicast redistribute static route-map AUTOGEN-Redistribute
     set protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
@@ -600,32 +602,58 @@ def get_vyos_route_map_redistribute(redistribute):
     delete policy route-map AUTOGEN-Redistribute
     set policy route-map AUTOGEN-Redistribute rule 10 action permit
     set policy route-map AUTOGEN-Redistribute rule 10 match ip address prefix-list AUTOGEN-LOCAL-ASN-PREFIX4
+    set policy route-map AUTOGEN-Redistribute rule 10 on-match goto {r_pre_accept}
     set policy route-map AUTOGEN-Redistribute rule 20 action permit
     set policy route-map AUTOGEN-Redistribute rule 20 match ipv6 address prefix-list AUTOGEN-LOCAL-ASN-PREFIX6
+    set policy route-map AUTOGEN-Redistribute rule 20 on-match goto {r_pre_accept}
+    set policy route-map AUTOGEN-Redistribute rule 999 action deny
+    set policy route-map AUTOGEN-Redistribute rule 1000 action permit
+    set policy route-map AUTOGEN-Redistribute rule 1000 on-match next
     set policy route-map AUTOGEN-Redistribute rule 10000 action permit
     """
 
-    r = 1000
-    for c in redistribute:
-        f += f"""
-        set policy route-map AUTOGEN-Redistribute rule {r} action {c["action"]}
-        set policy route-map AUTOGEN-Redistribute rule {r} match {c["match"]}
-        """
-        if "set" in c:
-            if not isinstance(c["set"], list):
-                set_list = [c["set"]]
-            else:
-                set_list = c["set"]
-            for r_set in set_list:
-                f += f"""
-                set policy route-map AUTOGEN-Redistribute rule {r} set {r_set}
-                """
-        # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
-        if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
+    if "pre-filter" in redistribute:
+        for c in redistribute["pre-filter"]:
             f += f"""
-            set policy route-map AUTOGEN-Redistribute rule {r} on-match next
+            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} action {c["action"]}
+            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} match {c["match"]}
+            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} on-match goto {r_pre_accept}
             """
-        r += 1
+            if "set" in c:
+                if not isinstance(c["set"], list):
+                    set_list = [c["set"]]
+                else:
+                    set_list = c["set"]
+                for r_set in set_list:
+                    f += f"""
+                    set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} set {r_set}
+                    """
+            r_pre_filter += 1
+
+    r_pre_accept += 1
+    if "pre-accept" in redistribute:
+        for c in redistribute["pre-accept"]:
+            f += f"""
+            set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} action {c["action"]}
+            set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} match {c["match"]}
+            """
+            if "set" in c:
+                if not isinstance(c["set"], list):
+                    set_list = [c["set"]]
+                else:
+                    set_list = c["set"]
+                for r_set in set_list:
+                    f += f"""
+                    set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} set {r_set}
+                    """
+            # 或者给这些on-match-next false的全部跳转到10000？目前没跳转，不影响
+            if c["action"] == "permit" and (
+                "on-match-next" not in c or c["on-match-next"]
+            ):
+                f += f"""
+                set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} on-match next
+                """
+            r_pre_accept += 1
 
     return f
 
@@ -1246,7 +1274,7 @@ def get_final_vyos_cmd(router_config):
     if "redistribute" in router_config:
         configure += get_vyos_route_map_redistribute(router_config["redistribute"])
     else:
-        configure += get_vyos_route_map_redistribute([])
+        configure += get_vyos_route_map_redistribute({})
 
     # system frr
     configure += get_vyos_system_frr()
