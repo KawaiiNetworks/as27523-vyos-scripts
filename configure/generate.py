@@ -601,10 +601,10 @@ def get_vyos_route_map_redistribute(redistribute):
     set protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
     delete policy route-map AUTOGEN-Redistribute
     set policy route-map AUTOGEN-Redistribute rule 10 action permit
-    set policy route-map AUTOGEN-Redistribute rule 10 match ip address prefix-list AUTOGEN-LOCAL-ASN-PREFIX4
+    set policy route-map AUTOGEN-Redistribute rule 10 match ip address prefix-list AUTOGEN-LOCAL-ASN-PREFIX4-le32
     set policy route-map AUTOGEN-Redistribute rule 10 on-match goto {r_pre_accept}
     set policy route-map AUTOGEN-Redistribute rule 20 action permit
-    set policy route-map AUTOGEN-Redistribute rule 20 match ipv6 address prefix-list AUTOGEN-LOCAL-ASN-PREFIX6
+    set policy route-map AUTOGEN-Redistribute rule 20 match ipv6 address prefix-list AUTOGEN-LOCAL-ASN-PREFIX6-le128
     set policy route-map AUTOGEN-Redistribute rule 20 on-match goto {r_pre_accept}
     set policy route-map AUTOGEN-Redistribute rule 999 action deny
     set policy route-map AUTOGEN-Redistribute rule 1000 action permit
