@@ -1043,6 +1043,7 @@ def get_vyos_protocol_bgp(bgp_config, _router_id):
     set protocols bgp address-family ipv6-unicast redistribute connected
     set protocols bgp address-family ipv6-unicast redistribute static
     set protocols bgp parameters graceful-restart
+    set protocols bgp parameters no-ipv6-auto-ra
     set protocols bgp parameters router-id {_router_id}
     set protocols bgp system-as {local_asn}
     """
