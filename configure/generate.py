@@ -165,7 +165,15 @@ def get_as_info(asn):
     time.sleep(5)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
     print(f"getting AS{asn} info...")
-    response = requests.get(url, timeout=10).json()["data"][0]
+    try:
+        response = requests.get(url, timeout=10).json()["data"][0]
+    except IndexError as e:
+        print(f"AS{asn} does not exist in PeeringDB")
+        warnings.append(f"AS{asn} does not exist in PeeringDB")
+        as_name_map[asn] = f"Nonexistent AS{asn}"
+        asset_name_map[asn] = [f"AS{asn}"]
+        maximum_prefix_map[asn] = [100, 100]  # maximum_prefix for private ASN
+        return 1
 
     maximum_prefix_map[asn] = [
         response["info_prefixes4"],
