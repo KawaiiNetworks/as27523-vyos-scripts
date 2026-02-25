@@ -30,6 +30,8 @@ jobs:
           bash install-dependencies.sh
 
       - name: Generate script
+        env:
+          ARIN_API_KEY: ${{ secrets.ARIN_API_KEY }}
         run: mkdir outputs && python generate.py | tee outputs/generate.log
 
       - name: Update nightly release
