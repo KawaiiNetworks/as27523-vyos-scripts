@@ -7,6 +7,7 @@ import time
 import re
 import hashlib
 import requests
+import xml.etree.ElementTree as ET
 import yaml
 import dns.resolver
 from aggregate_prefixes import aggregate_prefixes
@@ -1350,6 +1351,142 @@ GITHUB_REPOSITORY={os.getenv("GITHUB_REPOSITORY")}
     return script_start + script_env + configure + script_end
 
 
+def update_arin_asset_members(api_key):
+    """
+    Update ARIN AS-SET members with downstream ASNs if the API key is valid
+    and the local AS-SET is managed by ARIN.
+    """
+    print("----------------------------------------------------------------")
+    print("Checking ARIN AS-SET consistency...")
+
+    # 1. Determine Local AS-SET Name
+    # We take the first AS-SET from PeeringDB info as the primary one to manage if available
+    # Or fallback to AS{local_asn}
+    if local_asn in asset_name_map and asset_name_map[local_asn]:
+        target_asset_name_full = asset_name_map[local_asn][0]
+        # remove ' -S ...' suffix if exists (from get_as_info logic)
+        target_asset_name = target_asset_name_full.split(" -S")[0].strip()
+    else:
+        target_asset_name = f"AS{local_asn}"
+
+    print(f"Target Local AS-SET: {target_asset_name}")
+
+    base_url = "https://reg.arin.net/rest"
+    # Use headers for XML content
+    headers = {
+        "Content-Type": "application/xml",
+        "Accept": "application/xml"
+    }
+
+    # 2. Get Current AS-SET from ARIN
+    # URL: https://reg.arin.net/rest/irr/as-set/{handle}
+    url = f"{base_url}/irr/as-set/{target_asset_name}?apikey={api_key}"
+    
+    try:
+        response = requests.get(url, headers=headers)
+    except requests.RequestException as e:
+        print(f"Skipping ARIN check: Request failed - {e}")
+        return
+
+    if response.status_code != 200:
+        print(f"Skipping ARIN check: Could not retrieve AS-SET '{target_asset_name}' from ARIN (Status: {response.status_code}).")
+        print("Reason might be: Invalid API Key, AS-SET not managed by ARIN, or server error.")
+        return
+
+    # Parse XML response
+    try:
+        # We need to register namespace to properly parse/find elements
+        # ARIN usually uses this namespace
+        namespaces = {'ns': 'http://www.arin.net/regrws/core/v1'}
+        # Register for writing back without ns0: prefixes if possible, asking ElementTree
+        ET.register_namespace('', namespaces['ns'])
+        
+        root = ET.fromstring(response.content)
+        
+        # Extract current members
+        # Structure: <asSet ...><members><member name="AS12345"/>...</members>...</asSet>
+        current_members = set()
+        members_container = root.find("ns:members", namespaces)
+        if members_container is not None:
+            for member in members_container.findall("ns:member", namespaces):
+                current_members.add(member.get("name"))
+            
+        print(f"Current ARIN members: {sorted(list(current_members))}")
+        
+    except ET.ParseError as e:
+        print(f"Skipping ARIN check: Failed to parse XML response - {e}")
+        return
+
+    # 3. Collect Downstream AS-SETs from local config
+    # We need to scan all downstream neighbors across all routers defined in config["router"]
+    downstream_asset_members_map = {}
+    
+    # We need to iterate over config["router"] list
+    if "router" in config:
+        for router in config["router"]:
+            if "protocols" in router and "bgp" in router["protocols"] and "downstream" in router["protocols"]["bgp"]:
+                for neighbor in router["protocols"]["bgp"]["downstream"]:
+                    ds_asn = neighbor["asn"]
+                    
+                    # Validate ASN first
+                    if validateASN(ds_asn) != 1:
+                        continue
+                        
+                    # Get AS-SET for this downstream ASN
+                    # get_asset_name(ds_asn) returns a list of AS-SET names
+                    # We usually pick the first one as the primary AS-SET to include
+                    ds_assets = get_asset_name(ds_asn)
+                    
+                    if ds_assets:
+                        # Extract clean name without -S suffix
+                        ds_member_name = ds_assets[0].split(" -S")[0].strip()
+                        downstream_asset_members_map[ds_asn] = ds_member_name
+
+    expected_members = set(downstream_asset_members_map.values())
+    print(f"Expected Downstream members from config: {sorted(list(expected_members))}")
+
+    # 4. Compare and Update
+    # Find members that are in expected but not in current
+    members_to_add = expected_members - current_members
+    
+    if not members_to_add:
+        print("ARIN AS-SET is up to date. No new members to add.")
+        return
+
+    print(f"Adding missing members to ARIN AS-SET: {members_to_add}")
+    
+    # Add new members to XML root
+    # Note: We need to ensure we use the correct namespace for new elements
+    ns_url = namespaces['ns']
+    
+    # If <members> container doesn't exist, create it (unlikely for valid AS-SET but possible if empty)
+    if members_container is None:
+        members_container = ET.Element(f"{{{ns_url}}}members")
+        root.append(members_container)
+
+    for new_member in members_to_add:
+        # Create <member name="NEW_MEMBER"/>
+        new_elem = ET.Element(f"{{{ns_url}}}member")
+        new_elem.set("name", new_member)
+        members_container.append(new_elem)
+    
+    # Generate new XML string
+    new_xml_content = ET.tostring(root, encoding='utf-8')
+    
+    # 5. Push Update
+    update_url = f"{base_url}/irr/as-set/{target_asset_name}?apikey={api_key}"
+    try:
+        update_response = requests.put(update_url, data=new_xml_content, headers=headers)
+        
+        if update_response.status_code == 200:
+            print("Successfully updated ARIN AS-SET.")
+        else:
+            print(f"Failed to update ARIN AS-SET. Status: {update_response.status_code}")
+            print(update_response.text)
+    except requests.RequestException as e:
+        print(f"Failed to push update to ARIN: {e}")
+
+
 if __name__ == "__main__":
 
     router_list = config["router"]
@@ -1396,3 +1533,9 @@ if __name__ == "__main__":
         print(w)
     print("Please note that there are issues with these ASNs: ----------------")
     print(bad_asn_set)
+
+    if os.getenv("ARIN_API_KEY"):
+        try:
+            update_arin_asset_members(os.getenv("ARIN_API_KEY"))
+        except Exception as e:
+            print(f"An error occurred while updating ARIN AS-SET: {e}")
