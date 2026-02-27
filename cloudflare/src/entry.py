@@ -9,7 +9,8 @@ URL routing:
 """
 
 from copy import deepcopy
-from js import fetch, Response, Headers
+from js import fetch, Headers
+from workers import WorkerEntrypoint, Response
 import hashlib
 import ipaddress
 import json
@@ -976,77 +977,75 @@ ROUTER={router_name}
 # Worker entrypoint
 # ---------------------------------------------------------------------------
 
-from workers import Response as WResponse
 
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        url = request.url
+        path = url.split("//", 1)[-1].split("/", 1)[-1]  # strip host
+        path = path.strip("/")
 
-async def on_fetch(request, env):
-    url = request.url
-    path = url.split("//", 1)[-1].split("/", 1)[-1]  # strip host
-    path = path.strip("/")
+        parts = path.split("/")
+        if len(parts) < 2:
+            return Response("Usage: /{user}/{config_repo}/\n\nResources:\n  router/configure.{name}.sh\n  router/defaultconfig.sh\n  find_unused.py\n", status=404, headers={"content-type": "text/plain"})
 
-    parts = path.split("/")
-    if len(parts) < 2:
-        return WResponse("Usage: /{user}/{config_repo}/\n\nResources:\n  router/configure.{name}.sh\n  router/defaultconfig.sh\n  find_unused.py\n", status=404, headers={"content-type": "text/plain"})
+        user = parts[0]
+        config_repo = parts[1]
+        resource = "/".join(parts[2:]) if len(parts) > 2 else ""
 
-    user = parts[0]
-    config_repo = parts[1]
-    resource = "/".join(parts[2:]) if len(parts) > 2 else ""
+        # Load config
+        config = await load_yaml_config(user, config_repo)
+        if config is None:
+            return Response(f"Cannot load vyos.yaml from {user}/{config_repo}", status=404, headers={"content-type": "text/plain"})
 
-    # Load config
-    config = await load_yaml_config(user, config_repo)
-    if config is None:
-        return WResponse(f"Cannot load vyos.yaml from {user}/{config_repo}", status=404, headers={"content-type": "text/plain"})
+        local_asn = config["local-asn"]
+        scripts_repo = f"as{local_asn}-vyos-scripts"
 
-    local_asn = config["local-asn"]
-    scripts_repo = f"as{local_asn}-vyos-scripts"
+        # Build cache store
+        cs = CacheStore()
+        await cs.preload_all(user, config_repo, config)
 
-    # Build cache store
-    cs = CacheStore()
-    await cs.preload_all(user, config_repo, config)
+        # Route: /router/configure.{name}.sh
+        if resource.startswith("router/configure.") and resource.endswith(".sh"):
+            router_name = resource[len("router/configure."):-len(".sh")]
+            target = None
+            for r in config.get("router", []):
+                if r["name"] == router_name:
+                    target = r
+                    break
+            if target is None:
+                available = [r["name"] for r in config.get("router", [])]
+                return Response(f"Router '{router_name}' not found.\nAvailable: {available}", status=404, headers={"content-type": "text/plain"})
+            try:
+                script = await generate_router_script(cs, target)
+                return Response(script, headers={"content-type": "text/plain; charset=utf-8"})
+            except Exception as e:
+                return Response(f"Error generating script: {e}", status=500, headers={"content-type": "text/plain"})
 
-    # Route: /router/configure.{name}.sh
-    if resource.startswith("router/configure.") and resource.endswith(".sh"):
-        router_name = resource[len("router/configure."):-len(".sh")]
-        # Find matching router
-        target = None
-        for r in config.get("router", []):
-            if r["name"] == router_name:
-                target = r
-                break
-        if target is None:
-            available = [r["name"] for r in config.get("router", [])]
-            return WResponse(f"Router '{router_name}' not found.\nAvailable: {available}", status=404, headers={"content-type": "text/plain"})
-        try:
-            script = await generate_router_script(cs, target)
-            return WResponse(script, headers={"content-type": "text/plain; charset=utf-8"})
-        except Exception as e:
-            return WResponse(f"Error generating script: {e}", status=500, headers={"content-type": "text/plain"})
+        # Route: /router/defaultconfig.sh
+        elif resource == "router/defaultconfig.sh":
+            return Response(cs.defaultconfig, headers={"content-type": "text/plain; charset=utf-8"})
 
-    # Route: /router/defaultconfig.sh
-    elif resource == "router/defaultconfig.sh":
-        return WResponse(cs.defaultconfig, headers={"content-type": "text/plain; charset=utf-8"})
+        # Route: /find_unused.py
+        elif resource == "find_unused.py":
+            template = await github_raw(user, scripts_repo, "configure/find_unused.py")
+            if template is None:
+                return Response("find_unused.py not found", status=404, headers={"content-type": "text/plain"})
+            template = template.replace(
+                r"${default_config_url}",
+                f"https://{request.url.split('//')[1].split('/')[0]}/{user}/{config_repo}/router/defaultconfig.sh"
+            )
+            return Response(template, headers={"content-type": "text/plain; charset=utf-8"})
 
-    # Route: /find_unused.py
-    elif resource == "find_unused.py":
-        template = await github_raw(user, scripts_repo, "configure/find_unused.py")
-        if template is None:
-            return WResponse("find_unused.py not found", status=404, headers={"content-type": "text/plain"})
-        template = template.replace(
-            r"${default_config_url}",
-            f"https://{request.url.split('//')[1].split('/')[0]}/{user}/{config_repo}/router/defaultconfig.sh"
-        )
-        return WResponse(template, headers={"content-type": "text/plain; charset=utf-8"})
-
-    # Route: / (index)
-    elif resource == "" or resource == "/":
-        routers = [r["name"] for r in config.get("router", [])]
-        host = request.url.split("//")[1].split("/")[0]
-        base = f"https://{host}/{user}/{config_repo}"
-        rows = ""
-        for rn in routers:
-            url = f"{base}/router/configure.{rn}.sh"
-            rows += f'<tr><td>{rn}</td><td><a href="{url}">configure.{rn}.sh</a></td></tr>\n'
-        html = f"""<!DOCTYPE html>
+        # Route: / (index)
+        elif resource == "" or resource == "/":
+            routers = [r["name"] for r in config.get("router", [])]
+            host = request.url.split("//")[1].split("/")[0]
+            base = f"https://{host}/{user}/{config_repo}"
+            rows = ""
+            for rn in routers:
+                url = f"{base}/router/configure.{rn}.sh"
+                rows += f'<tr><td>{rn}</td><td><a href="{url}">configure.{rn}.sh</a></td></tr>\n'
+            html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>VyOS Config Generator — AS{local_asn}</title>
 <style>body{{font-family:monospace;max-width:800px;margin:40px auto;padding:0 20px}}
 table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccc;padding:8px;text-align:left}}
@@ -1062,7 +1061,8 @@ a{{color:#0366d6}}</style></head>
 <li><a href="{base}/find_unused.py">find_unused.py</a></li>
 </ul>
 </body></html>"""
-        return WResponse(html, headers={"content-type": "text/html; charset=utf-8"})
+            return Response(html, headers={"content-type": "text/html; charset=utf-8"})
 
-    else:
-        return WResponse(f"Not found: {resource}", status=404, headers={"content-type": "text/plain"})
+        else:
+            return Response(f"Not found: {resource}", status=404, headers={"content-type": "text/plain"})
+
