@@ -423,6 +423,25 @@ def check_all_present(config_dir, all_asns, peer_downstream_asns, do_pdb, do_bgp
     return missing
 
 
+def build_summary(config_dir, subdir):
+    """合并 cache/{subdir}/AS*.json → cache/{subdir}/summary.json"""
+    cache_sub = os.path.join(config_dir, "cache", subdir)
+    if not os.path.isdir(cache_sub):
+        return
+    summary = {}
+    for fname in sorted(os.listdir(cache_sub)):
+        m = re.match(r"^AS(\d+)\.json$", fname)
+        if not m:
+            continue
+        asn = m.group(1)
+        data = load_json(os.path.join(cache_sub, fname))
+        if data is not None:
+            summary[asn] = data
+    out = os.path.join(cache_sub, "summary.json")
+    write_json(out, summary)
+    print(f"  [SUMMARY] {subdir}/summary.json — {len(summary)} ASNs")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Cache PeeringDB and bgpq4 data for VyOS config generation."
@@ -460,10 +479,12 @@ def main():
 
     if do_pdb:
         pdb_failed = save_pdb_cache(config_dir, all_asns, args.fill_missing)
+        build_summary(config_dir, "pdb")
         print()
 
     if do_bgpq4:
         bgpq4_failed = save_bgpq4_cache(config_dir, peer_downstream_asns, args.fill_missing)
+        build_summary(config_dir, "bgpq4")
         print()
 
     # Final status check
