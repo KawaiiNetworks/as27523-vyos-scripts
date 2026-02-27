@@ -468,12 +468,16 @@ def get_vyos_prefix_list(ipversion, asn, max_length=None, filter_name=None, cone
 
     def vyos_cmd(network, length, ge, le, rule):
         # r = str(rule)
-        return f"""
-        set policy {pl} {fn} rule {rule} action permit
-        set policy {pl} {fn} rule {rule} prefix {network}/{length}
-        set policy {pl} {fn} rule {rule} ge {ge}
-        set policy {pl} {fn} rule {rule} le {max_length if max_length else le}
-        """
+        le_final=max_length if max_length else le
+        if int(ge)<=int(length) and int(length)<=int(le_final):
+            return f"""
+            set policy {pl} {fn} rule {rule} action permit
+            set policy {pl} {fn} rule {rule} prefix {network}/{length}
+            set policy {pl} {fn} rule {rule} ge {ge}
+            set policy {pl} {fn} rule {rule} le {le_final}
+            """
+        else:
+            return ""
 
     if cone:
         fn = filter_name if filter_name else f"AUTOGEN-AS{asn}-CONE"
