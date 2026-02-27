@@ -1007,11 +1007,7 @@ async def _handle(request):
     local_asn = config["local-asn"]
     scripts_repo = f"as{local_asn}-vyos-scripts"
 
-    # Build cache store
-    cs = CacheStore()
-    await cs.preload_all(user, config_repo, config)
-
-    # Route: /router/configure.{name}.sh
+    # Route: /router/configure.{name}.sh — needs full cache
     if resource.startswith("router/configure.") and resource.endswith(".sh"):
         router_name = resource[len("router/configure."):-len(".sh")]
         target = None
@@ -1023,13 +1019,17 @@ async def _handle(request):
             available = [r["name"] for r in config.get("router", [])]
             return Response(f"Router '{router_name}' not found.\nAvailable: {available}", status=404, headers={"content-type": "text/plain"})
         try:
+            cs = CacheStore()
+            await cs.preload_all(user, config_repo, config)
             script = await generate_router_script(cs, target)
             return Response(script, headers={"content-type": "text/plain; charset=utf-8"})
         except Exception as e:
             return Response(f"Error generating script: {e}", status=500, headers={"content-type": "text/plain"})
 
-    # Route: /router/defaultconfig.sh
+    # Route: /router/defaultconfig.sh — only needs defaults
     elif resource == "router/defaultconfig.sh":
+        cs = CacheStore()
+        await cs.load_defaults(user, scripts_repo)
         return Response(cs.defaultconfig, headers={"content-type": "text/plain; charset=utf-8"})
 
     # Route: /find_unused.py
@@ -1043,7 +1043,7 @@ async def _handle(request):
         )
         return Response(template, headers={"content-type": "text/plain; charset=utf-8"})
 
-    # Route: / (index)
+    # Route: / (index) — only needs vyos.yaml
     elif resource == "" or resource == "/":
         routers = [r["name"] for r in config.get("router", [])]
         host = request.url.split("//")[1].split("/")[0]
