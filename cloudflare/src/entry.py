@@ -985,12 +985,12 @@ async def on_fetch(request, env):
     path = path.strip("/")
 
     parts = path.split("/")
-    if len(parts) < 3:
-        return WResponse("Usage: /{user}/{config_repo}/{resource}\n\nResources:\n  router/configure.{name}.sh\n  router/defaultconfig.sh\n  find_unused.py\n", status=404, headers={"content-type": "text/plain"})
+    if len(parts) < 2:
+        return WResponse("Usage: /{user}/{config_repo}/\n\nResources:\n  router/configure.{name}.sh\n  router/defaultconfig.sh\n  find_unused.py\n", status=404, headers={"content-type": "text/plain"})
 
     user = parts[0]
     config_repo = parts[1]
-    resource = "/".join(parts[2:])
+    resource = "/".join(parts[2:]) if len(parts) > 2 else ""
 
     # Load config
     config = await load_yaml_config(user, config_repo)
