@@ -980,14 +980,29 @@ ROUTER={router_name}
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
+        try:
+            return await self._handle(request)
+        except Exception as e:
+            import traceback
+            return Response(f"Worker error:\n{traceback.format_exc()}", status=500, headers={"content-type": "text/plain"})
+
+    async def _handle(self, request):
         url = request.url
         path = url.split("//", 1)[-1].split("/", 1)[-1]  # strip host
         path = path.strip("/")
 
-        parts = path.split("/")
-        if len(parts) < 2:
-            return Response("Usage: /{user}/{config_repo}/\n\nResources:\n  router/configure.{name}.sh\n  router/defaultconfig.sh\n  find_unused.py\n", status=404, headers={"content-type": "text/plain"})
+        # Root path — no user/config_repo provided
+        if not path or path.count("/") < 1:
+            return Response(
+                "Usage: /{user}/{config_repo}/\n\nResources:\n"
+                "  router/configure.{name}.sh\n"
+                "  router/defaultconfig.sh\n"
+                "  find_unused.py\n",
+                status=200,
+                headers={"content-type": "text/plain"}
+            )
 
+        parts = path.split("/")
         user = parts[0]
         config_repo = parts[1]
         resource = "/".join(parts[2:]) if len(parts) > 2 else ""
