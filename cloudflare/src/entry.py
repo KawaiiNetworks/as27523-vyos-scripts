@@ -14,8 +14,7 @@ from workers import WorkerEntrypoint, Response
 import hashlib
 import ipaddress
 import json
-import os
-import re
+import yaml
 
 
 # ---------------------------------------------------------------------------
@@ -70,13 +69,6 @@ async def load_yaml_config(user, config_repo):
 
 
 def parse_yaml_simple(text):
-    """
-    Minimal YAML parser that handles the vyos.yaml structure.
-    Uses line-by-line parsing with indentation tracking.
-    NOTE: This is a simplified parser. For full YAML support,
-    the config should be pre-converted to JSON in the cache.
-    """
-    import yaml  # pyodide has pyyaml
     return yaml.safe_load(text)
 
 

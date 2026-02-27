@@ -2,7 +2,8 @@
 name = "vyos-config-generator"
 version = "1.0.0"
 requires-python = ">= 3.12"
-dependencies = []
+dependencies = ["pyyaml"]
 
-[tool.uv]
-dev-dependencies = ["workers-py"]
+[dependency-groups]
+dev = ["workers-py"]
+
