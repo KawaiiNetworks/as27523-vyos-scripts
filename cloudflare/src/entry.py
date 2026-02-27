@@ -1134,7 +1134,8 @@ async def _handle(request):
             script = await generate_router_script(cs, target)
             return Response(script, headers={"content-type": "text/plain; charset=utf-8"})
         except Exception as e:
-            return Response(f"Error generating script: {e}", status=500, headers={"content-type": "text/plain"})
+            import traceback
+            return Response(f"Error generating script:\n{traceback.format_exc()}", status=500, headers={"content-type": "text/plain"})
 
     # Route: /router/defaultconfig.sh — only needs defaults
     elif resource == "router/defaultconfig.sh":
