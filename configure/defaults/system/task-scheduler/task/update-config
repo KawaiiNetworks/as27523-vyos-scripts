@@ -7,8 +7,8 @@ sudo chown vyos -R /config/myapp
 cat <<EOL > /config/myapp/update-config.sh
 #!/bin/bash
 
-wget -T 60 -O /config/myapp/configure.${ROUTER}.sh https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/configure.${ROUTER}.sh
-wget -T 60 -O /config/myapp/find_unused.py https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/find_unused.py
+wget -T 60 -O /config/myapp/configure.${ROUTER}.sh ${WORKER_BASE_URL}/router/configure.${ROUTER}.sh
+wget -T 60 -O /config/myapp/find_unused.py ${WORKER_BASE_URL}/find_unused.py
 vbash /config/myapp/configure.${ROUTER}.sh | tee /config/myapp/configure.log
 rm /config/myapp/configure.${ROUTER}.sh
 EOL

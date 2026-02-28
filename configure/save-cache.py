@@ -7,6 +7,7 @@ save-cache.py — 将 PeeringDB 和 bgpq4 数据缓存到配置仓库的 cache/ 
     python save-cache.py /path/to/AS27523 --pdb-only
     python save-cache.py /path/to/AS27523 --bgpq4-only
     python save-cache.py /path/to/AS27523 --fill-missing
+    python save-cache.py /path/to/AS27523 --defaults-bundle --scripts-dir /path/to/scripts
 """
 
 import argparse
@@ -26,6 +27,7 @@ from aggregate_prefixes import aggregate_prefixes
 # ---------------------------------------------------------------------------
 # ASN validation (same logic as generate.py)
 # ---------------------------------------------------------------------------
+
 
 def validateASN(asn):
     asn = int(asn)
@@ -57,6 +59,7 @@ def validateASN(asn):
 # ---------------------------------------------------------------------------
 # PDB helpers
 # ---------------------------------------------------------------------------
+
 
 def fetch_pdb_info(asn):
     """
@@ -141,8 +144,12 @@ def bgpq4_as_set_member(asset_name):
     """bgpq4 -jt => list of ASN ints"""
     cmd = f"bgpq4 -S {BGPQ4_SOURCES} -jt {asset_name}"
     result = subprocess.run(
-        cmd, shell=True, check=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8",
+        cmd,
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
     )
     members = json.loads(result.stdout).get("NN", [])
     return sorted(set(members))
@@ -154,12 +161,16 @@ def bgpq4_prefix_matrix(ipversion, target):
     target 可以是 "as{ASN}" 或 AS-SET 名（如 "AS-HURRICANE"）。
     """
     cmd = (
-        f'bgpq4 -S {BGPQ4_SOURCES} -{ipversion} -A '
+        f"bgpq4 -S {BGPQ4_SOURCES} -{ipversion} -A "
         f'-F "%n,%l,%a,%A\\n" {target} -l CACHE'
     )
     result = subprocess.run(
-        cmd, shell=True, check=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8",
+        cmd,
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
     )
     lines = [x for x in result.stdout.splitlines() if x]
     matrix = [tuple(line.split(",")) for line in lines]
@@ -228,6 +239,7 @@ def fetch_bgpq4_data(asn, as_set_list):
 # Config parsing
 # ---------------------------------------------------------------------------
 
+
 def load_config(config_dir):
     yaml_path = os.path.join(config_dir, "network", "vyos", "vyos.yaml")
     if not os.path.isfile(yaml_path):
@@ -276,6 +288,7 @@ def collect_asns(config):
 # Cache I/O
 # ---------------------------------------------------------------------------
 
+
 def pdb_cache_path(cache_dir, asn):
     return os.path.join(cache_dir, "pdb", f"AS{asn}.json")
 
@@ -300,6 +313,7 @@ def load_json(path):
 # ---------------------------------------------------------------------------
 # Main logic
 # ---------------------------------------------------------------------------
+
 
 def save_pdb_cache(config_dir, all_asns, fill_missing):
     cache_dir = os.path.join(config_dir, "cache")
@@ -366,7 +380,9 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
 
         asn_type = validateASN(asn)
         if asn_type != 1:
-            print(f"  [SKIP] AS{asn}: not a public ASN (type={asn_type}), no bgpq4 data needed")
+            print(
+                f"  [SKIP] AS{asn}: not a public ASN (type={asn_type}), no bgpq4 data needed"
+            )
             skipped += 1
             continue
 
@@ -374,7 +390,9 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
         pdb_path = pdb_cache_path(cache_dir, asn)
         pdb_data = load_json(pdb_path)
         if pdb_data is None:
-            print(f"  [WARN] AS{asn}: no PDB cache found at {pdb_path}, using fallback AS{asn}")
+            print(
+                f"  [WARN] AS{asn}: no PDB cache found at {pdb_path}, using fallback AS{asn}"
+            )
             as_set_list = [f"AS{asn}"]
         else:
             as_set_list = pdb_data.get("as_set", [f"AS{asn}"])
@@ -442,6 +460,33 @@ def build_summary(config_dir, subdir):
     print(f"  [SUMMARY] {subdir}/summary.json — {len(summary)} ASNs")
 
 
+def build_defaults_bundle(config_dir, scripts_dir):
+    """将 scripts_dir/configure/defaults/ 下所有文件拼接成 config_dir/cache/defaults_bundle.txt"""
+    defaults_dir = os.path.join(scripts_dir, "configure", "defaults")
+    if not os.path.isdir(defaults_dir):
+        print(f"ERROR: defaults directory not found: {defaults_dir}")
+        sys.exit(1)
+
+    parts = []
+    count = 0
+    for root, _dirs, files in sorted(os.walk(defaults_dir)):
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = f.read()
+            parts.append(content)
+            if not content.endswith("\n"):
+                parts.append("\n")
+            count += 1
+
+    bundle = "".join(parts)
+    out = os.path.join(config_dir, "cache", "defaults_bundle.txt")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(bundle)
+    print(f"  [BUNDLE] defaults_bundle.txt — {count} files, {len(bundle)} bytes")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Cache PeeringDB and bgpq4 data for VyOS config generation."
@@ -451,13 +496,36 @@ def main():
         help="Path to config repo (e.g. ../AS27523). Must contain network/vyos/vyos.yaml",
     )
     parser.add_argument("--pdb-only", action="store_true", help="Only update PDB cache")
-    parser.add_argument("--bgpq4-only", action="store_true", help="Only update bgpq4 cache")
+    parser.add_argument(
+        "--bgpq4-only", action="store_true", help="Only update bgpq4 cache"
+    )
     parser.add_argument(
         "--fill-missing",
         action="store_true",
         help="Only fetch data for missing cache files, don't overwrite existing",
     )
+    parser.add_argument(
+        "--defaults-bundle",
+        action="store_true",
+        help="Build defaults_bundle.txt from scripts repo defaults/ directory",
+    )
+    parser.add_argument(
+        "--scripts-dir",
+        default=None,
+        help="Path to scripts repo (required with --defaults-bundle)",
+    )
     args = parser.parse_args()
+
+    # Handle --defaults-bundle mode (independent of PDB/bgpq4)
+    if args.defaults_bundle:
+        config_dir = os.path.abspath(args.config_dir)
+        scripts_dir = args.scripts_dir
+        if scripts_dir is None:
+            print("ERROR: --scripts-dir is required with --defaults-bundle")
+            sys.exit(1)
+        scripts_dir = os.path.abspath(scripts_dir)
+        build_defaults_bundle(config_dir, scripts_dir)
+        return
 
     config_dir = os.path.abspath(args.config_dir)
     config = load_config(config_dir)
@@ -470,7 +538,9 @@ def main():
     print(f"Local ASN: {local_asn}")
     print(f"All ASNs needing PDB: {len(all_asns)} — {all_asns}")
     print(f"ASNs needing bgpq4: {len(peer_downstream_asns)} — {peer_downstream_asns}")
-    print(f"Mode: {'PDB-only' if args.pdb_only else 'bgpq4-only' if args.bgpq4_only else 'full'}")
+    print(
+        f"Mode: {'PDB-only' if args.pdb_only else 'bgpq4-only' if args.bgpq4_only else 'full'}"
+    )
     print(f"Fill missing: {args.fill_missing}")
     print()
 
@@ -483,12 +553,16 @@ def main():
         print()
 
     if do_bgpq4:
-        bgpq4_failed = save_bgpq4_cache(config_dir, peer_downstream_asns, args.fill_missing)
+        bgpq4_failed = save_bgpq4_cache(
+            config_dir, peer_downstream_asns, args.fill_missing
+        )
         build_summary(config_dir, "bgpq4")
         print()
 
     # Final status check
-    missing = check_all_present(config_dir, all_asns, peer_downstream_asns, do_pdb, do_bgpq4)
+    missing = check_all_present(
+        config_dir, all_asns, peer_downstream_asns, do_pdb, do_bgpq4
+    )
 
     print("=" * 60)
     print("Final Status")
