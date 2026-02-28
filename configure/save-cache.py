@@ -114,14 +114,8 @@ def fetch_pdb_info(asn):
     name = response.get("name", "")
     chosen_name = aka if aka and len(aka) < len(name) else name
 
-    # as-set
-    as_set_str = response.get("irr_as_set", "").split()
-    as_set_name_list = []
-    for n in as_set_str:
-        if "::" in n:
-            as_set_name_list.append(f"{n.split('::')[1]} -S {n.split('::')[0]}")
-        else:
-            as_set_name_list.append(n)
+    # as-set (store original names from PeeringDB)
+    as_set_name_list = response.get("irr_as_set", "").split()
     if not as_set_name_list:
         as_set_name_list = [f"AS{asn}"]
 
@@ -140,9 +134,22 @@ def fetch_pdb_info(asn):
 BGPQ4_SOURCES = "RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB"
 
 
+def asset_to_bgpq4_arg(name):
+    """Convert an IRR as-set name to bgpq4 command argument.
+
+    e.g. 'RIPE::AS-EXAMPLE' -> 'AS-EXAMPLE -S RIPE'
+         'AS-HURRICANE'     -> 'AS-HURRICANE'
+    """
+    if "::" in name:
+        source, asset = name.split("::", 1)
+        return f"{asset} -S {source}"
+    return name
+
+
 def bgpq4_as_set_member(asset_name):
     """bgpq4 -jt => list of ASN ints"""
-    cmd = f"bgpq4 -S {BGPQ4_SOURCES} -jt {asset_name}"
+    arg = asset_to_bgpq4_arg(asset_name)
+    cmd = f"bgpq4 -S {BGPQ4_SOURCES} -jt {arg}"
     result = subprocess.run(
         cmd,
         shell=True,
@@ -162,7 +169,7 @@ def bgpq4_prefix_matrix(ipversion, target):
     """
     cmd = (
         f"bgpq4 -S {BGPQ4_SOURCES} -{ipversion} -A "
-        f'-F "%n,%l,%a,%A\\n" {target} -l CACHE'
+        f'-F "%n,%l,%a,%A\\n" {asset_to_bgpq4_arg(target)} -l CACHE'
     )
     result = subprocess.run(
         cmd,
@@ -424,7 +431,7 @@ def save_asset_cache(config_dir, config):
     pdb_summary_path = os.path.join(cache_dir, "pdb", "summary.json")
     pdb_summary = load_json(pdb_summary_path)
     if pdb_summary:
-        for asn_str, data in pdb_summary.items():
+        for _, data in pdb_summary.items():
             for name in data.get("as_set", []):
                 asset_names.add(name)
 
@@ -441,16 +448,19 @@ def save_asset_cache(config_dir, config):
     print("=" * 60)
 
     result = {}
+    asset_dir = os.path.join(cache_dir, "as-set")
     for name in sorted(asset_names):
         try:
             members = bgpq4_as_set_member(name)
             result[name] = members
+            safe_name = name.replace(":", "_")
+            write_json(os.path.join(asset_dir, f"{safe_name}.json"), members)
             print(f"  [OK] {name} -> {len(members)} members")
         except Exception as e:
             print(f"  [FAIL] {name}: {e}")
             result[name] = []
 
-    out = os.path.join(cache_dir, "as-set", "summary.json")
+    out = os.path.join(asset_dir, "summary.json")
     write_json(out, result)
     print(f"  [AS-SET] summary.json — {len(result)} as-sets")
 
