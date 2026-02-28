@@ -83,6 +83,7 @@ class CacheStore:
         self.local_asn = 0
         self.config = {}
         self.defaultconfig = ""
+        self.blacklist_asset_members = {}  # as-set name -> list of member ASNs
 
     def _apply_pdb(self, asn, data):
         """Apply PeeringDB cache entry for an ASN."""
@@ -178,3 +179,10 @@ class CacheStore:
 
         # Load defaults bundle (1 request)
         await self._load_defaults(user, config_repo)
+
+        # Load as-set member cache (1 request)
+        asset_data = await github_raw_json(
+            user, config_repo, "cache/as-set/summary.json"
+        )
+        if asset_data:
+            self.blacklist_asset_members = asset_data

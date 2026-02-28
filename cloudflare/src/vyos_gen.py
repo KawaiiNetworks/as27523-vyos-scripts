@@ -96,9 +96,16 @@ def gen_blacklist_filter(cs, blacklist_config):
             """
             as_r += 1
     if "as-set" in blacklist_config:
-        # as-set blacklist: in the Worker context we don't have bgpq4,
-        # so we skip as-set expansion (same as original entry.py).
-        pass
+        for asset_name in blacklist_config["as-set"]:
+            members = cs.blacklist_asset_members.get(asset_name, [])
+            as_list = [str(x) for x in members]
+            for n in range(0, len(as_list), 20):
+                chunk = as_list[n : n + 20]
+                cmd += f"""
+                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
+                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} regex '_({"|".join(chunk)})_'
+                """
+                as_r += 1
     p4_r = 1
     if "prefix4" in blacklist_config:
         for prefix in blacklist_config["prefix4"]:
@@ -672,8 +679,14 @@ def gen_bgp(cs, bgp_config, router_id):
 
 
 # ---------------------------------------------------------------------------
-# Kernel / BMP / sFlow / SNMP
+# System FRR / Kernel / BMP / sFlow / SNMP
 # ---------------------------------------------------------------------------
+
+
+def gen_system_frr(cs):
+    """System FRR configuration (placeholder, matching generate.py)."""
+    return """
+    """
 
 
 def gen_kernel(cs, kernel_config):
@@ -834,6 +847,9 @@ async def generate_router_script(cs, router_config):
         configure += gen_redistribute(cs, router_config["redistribute"])
     else:
         configure += gen_redistribute(cs, {})
+
+    # System FRR
+    configure += gen_system_frr(cs)
 
     # Services
     if "service" in router_config:

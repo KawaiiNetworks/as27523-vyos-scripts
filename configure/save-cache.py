@@ -415,6 +415,46 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
     return failed_asns
 
 
+def save_asset_cache(config_dir, config):
+    """展开所有 as-set 名称，缓存到 cache/as-set/summary.json"""
+    cache_dir = os.path.join(config_dir, "cache")
+
+    # 1. 从 PDB 缓存中收集所有 as-set 名称
+    asset_names = set()
+    pdb_summary_path = os.path.join(cache_dir, "pdb", "summary.json")
+    pdb_summary = load_json(pdb_summary_path)
+    if pdb_summary:
+        for asn_str, data in pdb_summary.items():
+            for name in data.get("as_set", []):
+                asset_names.add(name)
+
+    # 2. 从 blacklist 中收集 as-set 名称
+    for name in config.get("blacklist", {}).get("as-set", []):
+        asset_names.add(name)
+
+    if not asset_names:
+        print("  [SKIP] No as-set names to expand")
+        return
+
+    print("=" * 60)
+    print(f"Expanding {len(asset_names)} as-set names")
+    print("=" * 60)
+
+    result = {}
+    for name in sorted(asset_names):
+        try:
+            members = bgpq4_as_set_member(name)
+            result[name] = members
+            print(f"  [OK] {name} -> {len(members)} members")
+        except Exception as e:
+            print(f"  [FAIL] {name}: {e}")
+            result[name] = []
+
+    out = os.path.join(cache_dir, "as-set", "summary.json")
+    write_json(out, result)
+    print(f"  [AS-SET] summary.json — {len(result)} as-sets")
+
+
 def check_all_present(config_dir, all_asns, peer_downstream_asns, do_pdb, do_bgpq4):
     """检查所有需要的 JSON 是否都存在（包括旧缓存）。"""
     cache_dir = os.path.join(config_dir, "cache")
@@ -556,6 +596,7 @@ def main():
         bgpq4_failed = save_bgpq4_cache(
             config_dir, peer_downstream_asns, args.fill_missing
         )
+        save_asset_cache(config_dir, config)
         build_summary(config_dir, "bgpq4")
         print()
 
