@@ -453,8 +453,7 @@ def save_asset_cache(config_dir, config):
         try:
             members = bgpq4_as_set_member(name)
             result[name] = members
-            safe_name = name.replace(":", "_")
-            write_json(os.path.join(asset_dir, f"{safe_name}.json"), members)
+            write_json(os.path.join(asset_dir, f"{name}.json"), members)
             print(f"  [OK] {name} -> {len(members)} members")
         except Exception as e:
             print(f"  [FAIL] {name}: {e}")
