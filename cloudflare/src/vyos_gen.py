@@ -8,8 +8,8 @@ instead of using module-level globals.
 import hashlib
 import ipaddress
 
-from .cache import validate_asn, TIER1_ASNS
-from .github import resolve_router_id
+from cache import validate_asn, TIER1_ASNS
+from github import resolve_router_id
 
 
 # ---------------------------------------------------------------------------

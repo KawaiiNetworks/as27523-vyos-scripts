@@ -5,7 +5,7 @@ Loads PDB/bgpq4 summary.json and defaults_bundle.txt from the config repo,
 providing the data structures needed by vyos_gen.py.
 """
 
-from .github import github_raw, github_raw_json
+from github import github_raw, github_raw_json
 
 # ---------------------------------------------------------------------------
 # ASN validation

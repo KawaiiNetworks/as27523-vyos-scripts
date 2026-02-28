@@ -10,10 +10,10 @@ URL routing:
 
 from workers import Response
 
-from .github import github_raw, load_yaml_config
-from .cache import CacheStore
-from .vyos_gen import generate_router_script
-from .index_page import build_index_html
+from github import github_raw, load_yaml_config
+from cache import CacheStore
+from vyos_gen import generate_router_script
+from index_page import build_index_html
 
 
 async def on_fetch(request, env):
