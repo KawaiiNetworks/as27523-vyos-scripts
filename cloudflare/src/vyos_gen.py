@@ -873,7 +873,8 @@ async def generate_router_script(cs, router_config):
 
     # Assemble final script
     configure = (
-        "\nconfigure\n"
+        "\necho 'start configure'\n"
+        + "\nconfigure\n"
         + cs.defaultconfig
         + configure
         + (
