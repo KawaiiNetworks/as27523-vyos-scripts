@@ -521,29 +521,29 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
         {f"set protocols bgp neighbor {addr} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
         """
 
-        if is_ip(addr) and not (
-            "extended-nexthop" in neighbor and neighbor["extended-nexthop"]
-        ):
-            iv = ipaddress.ip_address(addr).version
-            bgp_cmd += _bgp_address_family(
-                cs, iv, asn, addr, neighbor, ntype, rmi, rmo_adopted
-            )
+        if "address-family" in neighbor:
+            if (
+                "ipv4" in neighbor["address-family"]
+                and neighbor["address-family"]["ipv4"]
+            ):
+                bgp_cmd += _bgp_address_family(
+                    cs, 4, asn, addr, neighbor, ntype, rmi, rmo_adopted
+                )
+            if (
+                "ipv6" in neighbor["address-family"]
+                and neighbor["address-family"]["ipv6"]
+            ):
+                bgp_cmd += _bgp_address_family(
+                    cs, 6, asn, addr, neighbor, ntype, rmi, rmo_adopted
+                )
         else:
-            if "address-family" in neighbor:
-                if (
-                    "ipv4" in neighbor["address-family"]
-                    and neighbor["address-family"]["ipv4"]
-                ):
-                    bgp_cmd += _bgp_address_family(
-                        cs, 4, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                    )
-                if (
-                    "ipv6" in neighbor["address-family"]
-                    and neighbor["address-family"]["ipv6"]
-                ):
-                    bgp_cmd += _bgp_address_family(
-                        cs, 6, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                    )
+            if is_ip(addr) and not (
+                "extended-nexthop" in neighbor and neighbor["extended-nexthop"]
+            ):
+                iv = ipaddress.ip_address(addr).version
+                bgp_cmd += _bgp_address_family(
+                    cs, iv, asn, addr, neighbor, ntype, rmi, rmo_adopted
+                )
             else:
                 bgp_cmd += _bgp_address_family(
                     cs, 4, asn, addr, neighbor, ntype, rmi, rmo_adopted
