@@ -151,7 +151,7 @@ def gen_as_path(cs, asn):
         cs.bad_asn_set.add(asn)
     cone_list = [str(x) for x in cone_list]
     config = cs.config
-    if len(cone_list) + 1 > config["as-set-limit"]["member-limit"]:
+    if len(cone_list) + 1 > config["as-set-limit"]["member-limit"] or asn in cs.cone_members_exceeds:
         if asn in config["as-set-limit"]["large-as-list"]:
             cmd += f"""
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
@@ -184,15 +184,9 @@ def gen_prefix_list(cs, ipversion, asn, max_length=None, filter_name=None, cone=
     else:
         prefix_matrix = list(cs.prefix_matrix_map.get((ipversion, asn), []))
 
-    if len(prefix_matrix) == 0:
-        zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
-        le = 32 if ipversion == 4 else 128
-        cmd += f"""
-        set policy {pl} {fn} rule 10 action deny
-        set policy {pl} {fn} rule 10 prefix {zero}
-        set policy {pl} {fn} rule 10 le {le}
-        """
-    elif len(prefix_matrix) > config["as-set-limit"]["prefix-limit"]:
+    exceeds = len(prefix_matrix) > config["as-set-limit"]["prefix-limit"] or (cone and (ipversion, asn) in cs.cone_prefix_exceeds)
+
+    if exceeds:
         if asn in config["as-set-limit"]["large-as-list"]:
             zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
             le = 24 if ipversion == 4 else 48
@@ -210,6 +204,14 @@ def gen_prefix_list(cs, ipversion, asn, max_length=None, filter_name=None, cone=
             set policy {pl} {fn} rule 10 le {le}
             """
             cs.bad_asn_set.add(asn)
+    elif len(prefix_matrix) == 0:
+        zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
+        le = 32 if ipversion == 4 else 128
+        cmd += f"""
+        set policy {pl} {fn} rule 10 action deny
+        set policy {pl} {fn} rule 10 prefix {zero}
+        set policy {pl} {fn} rule 10 le {le}
+        """
     else:
         c = 1
         for prefix in prefix_matrix:

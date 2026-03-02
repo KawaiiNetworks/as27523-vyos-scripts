@@ -79,6 +79,8 @@ class CacheStore:
         self.cone_prefix_matrix_map = {}
         self.neighbor_id_hashmap = {}
         self.bad_asn_set = set()
+        self.cone_members_exceeds = set()    # {asn}
+        self.cone_prefix_exceeds = set()     # {(ipversion, asn)}
         self.warnings = []
         self.local_asn = 0
         self.config = {}
@@ -94,6 +96,13 @@ class CacheStore:
 
     def _apply_bgpq4(self, asn, data):
         """Apply bgpq4 cache entry for an ASN."""
+        if data.get("cone_members_exceeds"):
+            self.cone_members_exceeds.add(asn)
+        if data.get("cone_prefix4_exceeds"):
+            self.cone_prefix_exceeds.add((4, asn))
+        if data.get("cone_prefix6_exceeds"):
+            self.cone_prefix_exceeds.add((6, asn))
+
         self.cone_map[asn] = data.get("cone_members", [])
         self.prefix_matrix_map[(4, asn)] = [tuple(x) for x in data.get("prefix4", [])]
         self.prefix_matrix_map[(6, asn)] = [tuple(x) for x in data.get("prefix6", [])]

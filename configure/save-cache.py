@@ -491,23 +491,61 @@ def check_all_present(config_dir, all_asns, peer_downstream_asns, do_pdb, do_bgp
     return missing
 
 
-def build_summary(config_dir, subdir):
-    """合并 cache/{subdir}/AS*.json → cache/{subdir}/summary.json"""
+def build_summary(config_dir, subdir, config=None):
+    """合并 cache/{subdir}/AS*.json → cache/{subdir}/summary.json
+
+    当 subdir 为 "bgpq4" 且提供了 config 时，对每个字段独立判断：
+    - cone_members 超过 member-limit  → 清空并标记 cone_members_exceeds
+    - cone_prefix4 超过 prefix-limit  → 清空并标记 cone_prefix4_exceeds
+    - cone_prefix6 超过 prefix-limit  → 清空并标记 cone_prefix6_exceeds
+    """
     cache_sub = os.path.join(config_dir, "cache", subdir)
     if not os.path.isdir(cache_sub):
         return
+
+    member_limit = None
+    prefix_limit = None
+    if subdir == "bgpq4" and config and "as-set-limit" in config:
+        member_limit = config["as-set-limit"].get("member-limit")
+        prefix_limit = config["as-set-limit"].get("prefix-limit")
+
     summary = {}
+    trimmed = 0
     for fname in sorted(os.listdir(cache_sub)):
         m = re.match(r"^AS(\d+)\.json$", fname)
         if not m:
             continue
         asn = m.group(1)
         data = load_json(os.path.join(cache_sub, fname))
-        if data is not None:
-            summary[asn] = data
+        if data is None:
+            continue
+
+        if member_limit is not None and prefix_limit is not None:
+            did_trim = False
+            # 每个字段独立判断
+            if (len(data.get("cone_members", [])) + 1) > member_limit:
+                data["cone_members"] = []
+                data["cone_members_exceeds"] = True
+                did_trim = True
+            if len(data.get("cone_prefix4", [])) > prefix_limit:
+                data["cone_prefix4"] = []
+                data["cone_prefix4_exceeds"] = True
+                did_trim = True
+            if len(data.get("cone_prefix6", [])) > prefix_limit:
+                data["cone_prefix6"] = []
+                data["cone_prefix6_exceeds"] = True
+                did_trim = True
+            if did_trim:
+                trimmed += 1
+                print(f"  [TRIM] AS{asn}")
+
+        summary[asn] = data
     out = os.path.join(cache_sub, "summary.json")
     write_json(out, summary)
-    print(f"  [SUMMARY] {subdir}/summary.json — {len(summary)} ASNs")
+    msg = f"  [SUMMARY] {subdir}/summary.json — {len(summary)} ASNs"
+    if trimmed:
+        msg += f" ({trimmed} trimmed)"
+    print(msg)
 
 
 def build_defaults_bundle(config_dir, scripts_dir):
@@ -734,7 +772,7 @@ def main():
             config_dir, peer_downstream_asns, args.fill_missing
         )
         save_asset_cache(config_dir, config)
-        build_summary(config_dir, "bgpq4")
+        build_summary(config_dir, "bgpq4", config)
         print()
 
     if do_arin:
