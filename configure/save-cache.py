@@ -595,7 +595,7 @@ def update_arin_asset_members(config_dir, config):
     local_pdb = load_json(pdb_cache_path(cache_dir, local_asn))
     if local_pdb and "as_set" in local_pdb and local_pdb["as_set"]:
         target_asset_name_full = local_pdb["as_set"][0]
-        target_asset_name = target_asset_name_full.split(" -S")[0].strip()
+        target_asset_name = target_asset_name_full.split(" -S")[0].strip().split("::")[-1]
     else:
         target_asset_name = f"AS{local_asn}"
 
