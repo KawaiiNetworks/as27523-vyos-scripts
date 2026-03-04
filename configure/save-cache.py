@@ -6,6 +6,7 @@ save-cache.py — 将 PeeringDB 和 bgpq4 数据缓存到配置仓库的 cache/ 
     python save-cache.py /path/to/AS27523
     python save-cache.py /path/to/AS27523 --pdb-only
     python save-cache.py /path/to/AS27523 --bgpq4-only
+    python save-cache.py /path/to/AS27523 --arin-only
     python save-cache.py /path/to/AS27523 --fill-missing
     python save-cache.py /path/to/AS27523 --defaults-bundle --scripts-dir /path/to/scripts
 """
@@ -594,8 +595,7 @@ def update_arin_asset_members(config_dir, config):
 
     local_pdb = load_json(pdb_cache_path(cache_dir, local_asn))
     if local_pdb and "as_set" in local_pdb and local_pdb["as_set"]:
-        target_asset_name_full = local_pdb["as_set"][0]
-        target_asset_name = target_asset_name_full.split(" -S")[0].strip().split("::")[-1]
+        target_asset_name = local_pdb["as_set"][0].split("::")[-1]
     else:
         target_asset_name = f"AS{local_asn}"
 
@@ -650,7 +650,7 @@ def update_arin_asset_members(config_dir, config):
                         
                     ds_pdb = load_json(pdb_cache_path(cache_dir, ds_asn))
                     if ds_pdb and "as_set" in ds_pdb and ds_pdb["as_set"]:
-                        ds_member_name = ds_pdb["as_set"][0].split(" -S")[0].strip()
+                        ds_member_name = ds_pdb["as_set"][0].split("::")[-1]
                         downstream_asset_members_map[ds_asn] = ds_member_name
                     else:
                         downstream_asset_members_map[ds_asn] = f"AS{ds_asn}"
