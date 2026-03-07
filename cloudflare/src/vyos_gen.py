@@ -151,7 +151,10 @@ def gen_as_path(cs, asn):
         cs.bad_asn_set.add(asn)
     cone_list = [str(x) for x in cone_list]
     config = cs.config
-    if len(cone_list) + 1 > config["as-set-limit"]["member-limit"] or asn in cs.cone_members_exceeds:
+    if (
+        len(cone_list) + 1 > config["as-set-limit"]["member-limit"]
+        or asn in cs.cone_members_exceeds
+    ):
         if asn in config["as-set-limit"]["large-as-list"]:
             cmd += f"""
             set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
@@ -184,7 +187,9 @@ def gen_prefix_list(cs, ipversion, asn, max_length=None, filter_name=None, cone=
     else:
         prefix_matrix = list(cs.prefix_matrix_map.get((ipversion, asn), []))
 
-    exceeds = len(prefix_matrix) > config["as-set-limit"]["prefix-limit"] or (cone and (ipversion, asn) in cs.cone_prefix_exceeds)
+    exceeds = len(prefix_matrix) > config["as-set-limit"]["prefix-limit"] or (
+        cone and (ipversion, asn) in cs.cone_prefix_exceeds
+    )
 
     if exceeds:
         if asn in config["as-set-limit"]["large-as-list"]:
@@ -615,11 +620,11 @@ def gen_bgp_neighbor(cs, ntype, neighbor):
     set policy route-map {rmo} rule 302 match large-community large-community-list AUTOGEN-OLA-ALL
     set policy route-map {rmo} rule 401 action permit
     set policy route-map {rmo} rule 401 match large-community large-community-list AUTOGEN-Prepend-1X-AS{asn}
-    set policy route-map {rmo} rule 401 set as-path prepend-last-as 1
+    set policy route-map {rmo} rule 401 set as-path prepend '{asn}'
     set policy route-map {rmo} rule 401 on-match next
     set policy route-map {rmo} rule 402 action permit
     set policy route-map {rmo} rule 402 match large-community large-community-list AUTOGEN-Prepend-2X-AS{asn}
-    set policy route-map {rmo} rule 402 set as-path prepend-last-as 2
+    set policy route-map {rmo} rule 402 set as-path prepend '{asn} {asn}'
     set policy route-map {rmo} rule 402 on-match next
     """
     ff += f"""
