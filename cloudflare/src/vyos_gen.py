@@ -515,7 +515,7 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
         delete protocols bgp neighbor {addr}
         {f"set protocols bgp neighbor {addr} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in cs.bad_asn_set and asn not in config.get("keepup-as-list", []))) else ""}
         {f"set protocols bgp neighbor {addr} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-        set protocols bgp neighbor {addr} description '{neighbor.get("description", f"{ntype}: {cs.as_name_map.get(asn, f'AS{asn}')}")}'
+        set protocols bgp neighbor {addr} description '{neighbor.get("description", f"{ntype[0].upper()}: {cs.as_name_map.get(asn, f'AS{asn}')}")}'
         set protocols bgp neighbor {addr} graceful-restart enable
         {f"set protocols bgp neighbor {addr} remote-as {asn}" if is_ip(addr) else f"set protocols bgp neighbor {addr} interface remote-as {asn}"}
         {f"set protocols bgp neighbor {addr} password '{password}'" if password else ""}
