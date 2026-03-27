@@ -797,7 +797,7 @@ async def generate_router_script(cs, router_config):
     config = cs.config
 
     router_name = router_config["name"]
-    router_id = await resolve_router_id(router_name)
+    router_id = router_config.get("router-id") or await resolve_router_id(router_name)
 
     configure = ""
 
