@@ -589,10 +589,7 @@ def update_arin_asset_members(config_dir, config):
     print(f"  Target Local AS-SET: {target_asset_name}")
 
     base_url = "https://reg.arin.net/rest"
-    headers = {
-        "Content-Type": "application/xml",
-        "Accept": "application/xml"
-    }
+    headers = {"Content-Type": "application/xml", "Accept": "application/xml"}
 
     url = f"{base_url}/irr/as-set/{target_asset_name}?apikey={api_key}"
     try:
@@ -602,39 +599,45 @@ def update_arin_asset_members(config_dir, config):
         return False
 
     if response.status_code != 200:
-        print(f"  [FAIL] Skipping ARIN check: Could not retrieve AS-SET '{target_asset_name}' from ARIN (Status: {response.status_code}).")
+        print(
+            f"  [FAIL] Skipping ARIN check: Could not retrieve AS-SET '{target_asset_name}' from ARIN (Status: {response.status_code})."
+        )
         return False
 
     try:
-        namespaces = {'ns': 'http://www.arin.net/regrws/core/v1'}
-        ET.register_namespace('', namespaces['ns'])
+        namespaces = {"ns": "http://www.arin.net/regrws/core/v1"}
+        ET.register_namespace("", namespaces["ns"])
         root = ET.fromstring(response.content)
-        
+
         current_members = set()
         members_container = root.find("ns:members", namespaces)
         if members_container is not None:
             for member in members_container.findall("ns:member", namespaces):
                 current_members.add(member.get("name"))
-            
+
         print(f"  Current ARIN members: {sorted(list(current_members))}")
-        
+
     except ET.ParseError as e:
         print(f"  [FAIL] Skipping ARIN check: Failed to parse XML response - {e}")
         return False
 
     downstream_asset_members_map = {}
-    
+
     if "router" in config:
         for router in config["router"]:
-            if "protocols" in router and "bgp" in router["protocols"] and "downstream" in router["protocols"]["bgp"]:
+            if (
+                "protocols" in router
+                and "bgp" in router["protocols"]
+                and "downstream" in router["protocols"]["bgp"]
+            ):
                 for neighbor in router["protocols"]["bgp"]["downstream"]:
                     if "asn" not in neighbor:
                         continue
                     ds_asn = neighbor["asn"]
-                    
+
                     if validateASN(ds_asn) != 1:
                         continue
-                        
+
                     ds_pdb = load_json(pdb_cache_path(cache_dir, ds_asn))
                     if ds_pdb and "as_set" in ds_pdb and ds_pdb["as_set"]:
                         ds_member_name = ds_pdb["as_set"][0].split("::")[-1]
@@ -643,17 +646,19 @@ def update_arin_asset_members(config_dir, config):
                         downstream_asset_members_map[ds_asn] = f"AS{ds_asn}"
 
     expected_members = set(downstream_asset_members_map.values())
-    print(f"  Expected Downstream members from config: {sorted(list(expected_members))}")
+    print(
+        f"  Expected Downstream members from config: {sorted(list(expected_members))}"
+    )
 
     members_to_add = expected_members - current_members
-    
+
     if not members_to_add:
         print("  [OK] ARIN AS-SET is up to date. No new members to add.")
         return True
 
     print(f"  Adding missing members to ARIN AS-SET: {members_to_add}")
-    
-    ns_url = namespaces['ns']
+
+    ns_url = namespaces["ns"]
     if members_container is None:
         members_container = ET.Element(f"{{{ns_url}}}members")
         root.append(members_container)
@@ -662,18 +667,22 @@ def update_arin_asset_members(config_dir, config):
         new_elem = ET.Element(f"{{{ns_url}}}member")
         new_elem.set("name", new_member)
         members_container.append(new_elem)
-    
-    new_xml_content = ET.tostring(root, encoding='utf-8')
-    
+
+    new_xml_content = ET.tostring(root, encoding="utf-8")
+
     update_url = f"{base_url}/irr/as-set/{target_asset_name}?apikey={api_key}"
     try:
-        update_response = requests.put(update_url, data=new_xml_content, headers=headers)
-        
+        update_response = requests.put(
+            update_url, data=new_xml_content, headers=headers
+        )
+
         if update_response.status_code == 200:
             print("  [OK] Successfully updated ARIN AS-SET.")
             return True
         else:
-            print(f"  [FAIL] Failed to update ARIN AS-SET. Status: {update_response.status_code}")
+            print(
+                f"  [FAIL] Failed to update ARIN AS-SET. Status: {update_response.status_code}"
+            )
             print(update_response.text)
             return False
     except requests.RequestException as e:
@@ -738,9 +747,12 @@ def main():
     print(f"All ASNs needing PDB: {len(all_asns)} — {all_asns}")
     print(f"ASNs needing bgpq4: {len(peer_downstream_asns)} — {peer_downstream_asns}")
     mode_strs = []
-    if do_pdb: mode_strs.append("PDB")
-    if do_bgpq4: mode_strs.append("bgpq4")
-    if do_arin: mode_strs.append("ARIN")
+    if do_pdb:
+        mode_strs.append("PDB")
+    if do_bgpq4:
+        mode_strs.append("bgpq4")
+    if do_arin:
+        mode_strs.append("ARIN")
     print(f"Mode: {' + '.join(mode_strs) if mode_strs else 'none'}")
     print(f"Fill missing: {args.fill_missing}")
     print()
