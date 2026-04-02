@@ -136,22 +136,9 @@ def fetch_pdb_info(asn):
 BGPQ4_SOURCES = "RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB"
 
 
-def asset_to_bgpq4_arg(name):
-    """Convert an IRR as-set name to bgpq4 command argument.
-
-    e.g. 'RIPE::AS-EXAMPLE' -> 'AS-EXAMPLE -S RIPE'
-         'AS-HURRICANE'     -> 'AS-HURRICANE'
-    """
-    if "::" in name:
-        source, asset = name.split("::", 1)
-        return f"{asset} -S {source}"
-    return name
-
-
 def bgpq4_as_set_member(asset_name):
     """bgpq4 -jt => list of ASN ints"""
-    arg = asset_to_bgpq4_arg(asset_name)
-    cmd = f"bgpq4 -S {BGPQ4_SOURCES} -jt {arg}"
+    cmd = f"bgpq4 -S {BGPQ4_SOURCES} -jt {asset_name}"
     result = subprocess.run(
         cmd,
         shell=True,
@@ -171,7 +158,7 @@ def bgpq4_prefix_matrix(ipversion, target):
     """
     cmd = (
         f"bgpq4 -S {BGPQ4_SOURCES} -{ipversion} -A "
-        f'-F "%n,%l,%a,%A\\n" {asset_to_bgpq4_arg(target)} -l CACHE'
+        f'-F "%n,%l,%a,%A\\n" {target} -l CACHE'
     )
     result = subprocess.run(
         cmd,
