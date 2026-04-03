@@ -770,6 +770,7 @@ def gen_sflow(cs, sflow_config):
         cmd += "\n    set system sflow vpp\n"
         for iface in sflow_config["vpp-interface"]:
             cmd += f"\n    set vpp sflow interface {iface}\n"
+            cmd += f"\n    set system sflow interface {iface}\n"
     return cmd
 
 
