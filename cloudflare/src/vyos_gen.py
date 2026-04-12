@@ -620,11 +620,11 @@ def gen_bgp_neighbor(cs, ntype, neighbor):
     set policy route-map {rmo} rule 302 match large-community large-community-list AUTOGEN-OLA-ALL
     set policy route-map {rmo} rule 401 action permit
     set policy route-map {rmo} rule 401 match large-community large-community-list AUTOGEN-Prepend-1X-AS{asn}
-    set policy route-map {rmo} rule 401 set as-path prepend '{asn}'
+    set policy route-map {rmo} rule 401 set as-path prepend '{la}'
     set policy route-map {rmo} rule 401 on-match next
     set policy route-map {rmo} rule 402 action permit
     set policy route-map {rmo} rule 402 match large-community large-community-list AUTOGEN-Prepend-2X-AS{asn}
-    set policy route-map {rmo} rule 402 set as-path prepend '{asn} {asn}'
+    set policy route-map {rmo} rule 402 set as-path prepend '{la} {la}'
     set policy route-map {rmo} rule 402 on-match next
     """
     ff += f"""
