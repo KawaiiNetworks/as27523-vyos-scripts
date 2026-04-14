@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-save-cache.py — 将 PeeringDB 和 bgpq4 数据缓存到配置仓库的 cache/ 目录。
+save-cache.py — 为 Cloudflare Worker 将 PeeringDB 和 bgpq4 数据缓存到配置仓库的 cache/ 目录。
 
 用法:
     python save-cache.py /path/to/AS27523
@@ -27,7 +27,7 @@ from aggregate_prefixes import aggregate_prefixes
 
 
 # ---------------------------------------------------------------------------
-# ASN validation (same logic as generate.py)
+# ASN validation
 # ---------------------------------------------------------------------------
 
 
@@ -66,7 +66,7 @@ def validateASN(asn):
 def fetch_pdb_info(asn):
     """
     从 PeeringDB 获取 ASN 信息，返回 dict。
-    对 private / not-found / 正常分别处理（与 generate.py get_as_info 完全一致）。
+    对 private / not-found / 正常分别处理。
     """
     asn = int(asn)
     asn_type = validateASN(asn)
@@ -130,7 +130,7 @@ def fetch_pdb_info(asn):
 
 
 # ---------------------------------------------------------------------------
-# bgpq4 helpers (same logic as generate.py)
+# bgpq4 helpers
 # ---------------------------------------------------------------------------
 
 BGPQ4_SOURCES = "RPKI,AFRINIC,ARIN,APNIC,LACNIC,RIPE,RADB,ALTDB"
@@ -175,7 +175,7 @@ def bgpq4_prefix_matrix(ipversion, target):
 
 
 def aggregate_prefixes_modified(prefix_matrix, ipversion):
-    """与 generate.py 一致的聚合逻辑"""
+    """聚合 prefix matrix，并生成缓存格式。"""
     if not prefix_matrix:
         return []
     prefixes = [f"{p[0]}/{p[1]}" for p in prefix_matrix]

@@ -3,10 +3,11 @@
 ## Features
 
 -   automatically generate filters based on the AS number of the BGP neighbor
+-   publish per-router VyOS configure scripts through Cloudflare Workers
 -   update all managed configurations periodically
 
-This repository generate a set of scripts to configure a VyOS router for an ISP.
-They will configure the following items and update them periodically:
+This repository provides the logic and default templates used to configure a VyOS router for an ISP.
+The generated scripts manage the following sections:
 
 ```
 system task-scheduler task update-config
@@ -28,16 +29,30 @@ system ip protocol bgp
 system ipv6 protocol bgp
 ```
 
-All you need is a YAML file, and then please enjoy :)
+## Current Architecture
+
+-   `AS{ASN}` is the config repository. It stores `network/vyos/vyos.yaml` and the generated cache files under `cache/`.
+-   This repository stores the generator code, default templates, helper tools, and the Cloudflare Worker.
+-   `configure/save-cache.py` prepares `cache/pdb/summary.json`, `cache/bgpq4/summary.json`, `cache/as-set/summary.json`, and `cache/defaults_bundle.txt` for the config repository.
+-   The Cloudflare Worker reads `vyos.yaml` and the cache files directly from GitHub, then serves:
+    -   `/{user}/{config_repo}/router/configure.{router}.sh`
+    -   `/{user}/{config_repo}/router/defaultconfig.sh`
+    -   `/{user}/{config_repo}/find_unused.py`
+-   The default scheduler downloads the latest script from the Worker every 12 hours and applies it on the router.
 
 ## How to use
 
--   Fork this repository and name it as `{Your Organization}/as{Your ASN}-vyos-scripts`
--   Create a new repository named `AS{Your ASN}`
--   Create vyos.yaml at `/network/vyos/vyos.yaml` in the repository `AS{Your ASN}`, please refer to the example https://github.com/KawaiiNetworks/AS27523/tree/main/network/vyos/vyos.yaml
--   In the repository `as{Your ASN}-vyos-scripts`, enable GitHub Actions `Generate and Upload configure.sh`
--   manually run the workflow `Generate and Upload configure.sh`, and then download the generated scripts from Releases - nightly vyos configuration
--   Run the downloaded scripts on your VyOS router
+-   Fork this repository and name it `{Your Organization}/as{Your ASN}-vyos-scripts`.
+-   Create a new repository named `AS{Your ASN}`.
+-   Create `network/vyos/vyos.yaml` in the `AS{Your ASN}` repository. You can refer to the example at https://github.com/KawaiiNetworks/AS27523/tree/main/network/vyos/vyos.yaml
+-   Install local dependencies for cache generation:
+    -   `cd configure`
+    -   `./install-dependencies.sh`
+-   Build cache files into the config repository:
+    -   `python save-cache.py /path/to/AS{Your ASN}`
+    -   `python save-cache.py /path/to/AS{Your ASN} --defaults-bundle --scripts-dir /path/to/as{Your ASN}-vyos-scripts`
+-   Deploy the Cloudflare Worker from this repository using the `Deploy Cloudflare Worker` GitHub Actions workflow.
+-   Use the Worker URL to fetch `configure.{router}.sh`, or let the installed `update-config` scheduler refresh it automatically on the router.
 
 ## Note
 

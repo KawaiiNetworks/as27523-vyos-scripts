@@ -1,8 +1,8 @@
 """
-VyOS configuration command generation.
+VyOS configuration command generation for the Cloudflare Worker.
 
-Ported from generate.py — all functions take a CacheStore (cs) instance
-instead of using module-level globals.
+All functions take a CacheStore (cs) instance instead of using module-level
+globals.
 """
 
 import hashlib
@@ -691,7 +691,7 @@ def gen_bgp(cs, bgp_config, router_id):
 
 
 def gen_system_frr(cs):
-    """System FRR configuration (placeholder, matching generate.py)."""
+    """System FRR configuration placeholder."""
     return """
     """
 
