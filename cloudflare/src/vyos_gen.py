@@ -443,23 +443,23 @@ def _bgp_address_family(cs, ipversion, asn, addr, neighbor, ntype, rmi, rmo):
         maximum_prefix_out = mp[0] if ipversion == 4 else mp[1]
 
     if "vrf" in neighbor:
-        bgp_neighbor_prefix = f"set vrf name {neighbor['vrf']} protocols bgp neighbor"
+        bgp_neighbor_prefix = f"vrf name {neighbor['vrf']} protocols bgp neighbor"
     else:
-        bgp_neighbor_prefix = "set protocols bgp neighbor"
+        bgp_neighbor_prefix = "protocols bgp neighbor"
 
     return f"""
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
-    {f"delete protocols bgp neighbor {addr} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-{get_neighbor_id(cs, neighbor)}" if "prefix-list" in neighbor else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if ntype in ["Peer", "Downstream"] else ""}
-    {f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if ntype in ["Upstream", "RouteServer", "Peer"] else ""}
-    {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast nexthop-self force
-    {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map export {rmo}
-    {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map import {rmi}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"{bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
+    {f"delete {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-{get_neighbor_id(cs, neighbor)}" if "prefix-list" in neighbor else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if ntype in ["Peer", "Downstream"] else ""}
+    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if ntype in ["Upstream", "RouteServer", "Peer"] else ""}
+    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast nexthop-self force
+    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map export {rmo}
+    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map import {rmi}
+    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
     """
 
 
@@ -509,7 +509,7 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id):
                 """
 
     if "vrf" in neighbor:
-        bgp_neighbor_prefix = f"set vrf name {neighbor['vrf']} protocols bgp neighbor"
+        bgp_neighbor_prefix = f"vrf name {neighbor['vrf']} protocols bgp neighbor"
         bgp_cmd += f"""
         delete vrf name {neighbor['vrf']} protocols bgp address-family
         delete vrf name {neighbor['vrf']} protocols bgp parameters
@@ -528,7 +528,7 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id):
         set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
         """
     else:
-        bgp_neighbor_prefix = "set protocols bgp neighbor"
+        bgp_neighbor_prefix = "protocols bgp neighbor"
 
     for addr in addrs:
         if "default-originate" in neighbor and neighbor["default-originate"]:
@@ -539,21 +539,21 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id):
             rmo_adopted = rmo
 
         bgp_cmd += f"""
-        delete protocols bgp neighbor {addr}
-        {f"{bgp_neighbor_prefix} {addr} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in cs.bad_asn_set and asn not in config.get("keepup-as-list", []))) else ""}
-        {f"{bgp_neighbor_prefix} {addr} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-        {bgp_neighbor_prefix} {addr} description '{neighbor.get("description", f"{ntype[0].upper()}: {cs.as_name_map.get(asn, f'AS{asn}')}")}'
-        {bgp_neighbor_prefix} {addr} graceful-restart enable
-        {f"{bgp_neighbor_prefix} {addr} remote-as {asn}" if is_ip(addr) else f"{bgp_neighbor_prefix} {addr} interface remote-as {asn}"}
-        {f"{bgp_neighbor_prefix} {addr} password '{password}'" if password else ""}
-        {f"{bgp_neighbor_prefix} {addr} ebgp-multihop {multihop}" if multihop else ""}
-        {bgp_neighbor_prefix} {addr} solo
-        {bgp_neighbor_prefix} {addr} update-source {neighbor["update-source"]}
-        {f"{bgp_neighbor_prefix} {addr} interface source-interface {neighbor['update-source']}" if is_ip(addr) and not is_ip(neighbor["update-source"]) and not multihop else ""}
-        {f"{bgp_neighbor_prefix} {addr} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
-        {f"{bgp_neighbor_prefix} {addr} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
-        {f"{bgp_neighbor_prefix} {addr} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
-        {f"{bgp_neighbor_prefix} {addr} local-as {neighbor['local-asn']} no-prepend replace-as" if "local-asn" in neighbor else ""}
+        delete {bgp_neighbor_prefix} {addr}
+        {f"set {bgp_neighbor_prefix} {addr} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in cs.bad_asn_set and asn not in config.get("keepup-as-list", []))) else ""}
+        {f"set {bgp_neighbor_prefix} {addr} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
+        set {bgp_neighbor_prefix} {addr} description '{neighbor.get("description", f"{ntype[0].upper()}: {cs.as_name_map.get(asn, f'AS{asn}')}")}'
+        set {bgp_neighbor_prefix} {addr} graceful-restart enable
+        {f"set {bgp_neighbor_prefix} {addr} remote-as {asn}" if is_ip(addr) else f"set {bgp_neighbor_prefix} {addr} interface remote-as {asn}"}
+        {f"set {bgp_neighbor_prefix} {addr} password '{password}'" if password else ""}
+        {f"set {bgp_neighbor_prefix} {addr} ebgp-multihop {multihop}" if multihop else ""}
+        set {bgp_neighbor_prefix} {addr} solo
+        set {bgp_neighbor_prefix} {addr} update-source {neighbor["update-source"]}
+        {f"set {bgp_neighbor_prefix} {addr} interface source-interface {neighbor['update-source']}" if is_ip(addr) and not is_ip(neighbor["update-source"]) and not multihop else ""}
+        {f"set {bgp_neighbor_prefix} {addr} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
+        {f"set {bgp_neighbor_prefix} {addr} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
+        {f"set {bgp_neighbor_prefix} {addr} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
+        {f"set {bgp_neighbor_prefix} {addr} local-as {neighbor['local-asn']} no-prepend replace-as" if "local-asn" in neighbor else ""}
         """
 
         if "address-family" in neighbor:
