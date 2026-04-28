@@ -463,7 +463,7 @@ def _bgp_address_family(cs, ipversion, asn, addr, neighbor, ntype, rmi, rmo):
     """
 
 
-def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
+def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id):
     la = cs.local_asn
     config = cs.config
     asn = la if ntype == "IBGP" else neighbor["asn"]
@@ -510,6 +510,23 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
 
     if "vrf" in neighbor:
         bgp_neighbor_prefix = f"set vrf name {neighbor['vrf']} protocols bgp neighbor"
+        bgp_cmd += f"""
+        delete vrf name {neighbor['vrf']} protocols bgp address-family
+        delete vrf name {neighbor['vrf']} protocols bgp parameters
+        delete vrf name {neighbor['vrf']} protocols bgp system-as
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute connected
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute static
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute connected
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute static
+        set vrf name {neighbor['vrf']} protocols bgp parameters graceful-restart
+        set vrf name {neighbor['vrf']} protocols bgp parameters no-ipv6-auto-ra
+        set vrf name {neighbor['vrf']} protocols bgp parameters router-id {router_id}
+        set vrf name {neighbor['vrf']} protocols bgp system-as {la}
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute connected route-map AUTOGEN-Redistribute
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute static route-map AUTOGEN-Redistribute
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
+        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
+        """
     else:
         bgp_neighbor_prefix = "set protocols bgp neighbor"
 
@@ -572,7 +589,7 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
     return bgp_cmd
 
 
-def gen_bgp_neighbor(cs, ntype, neighbor):
+def gen_bgp_neighbor(cs, ntype, neighbor, router_id):
     """Generate full config for a single BGP neighbor (route-maps + session)."""
     la = cs.local_asn
     nid = get_neighbor_id(cs, neighbor)
@@ -655,7 +672,7 @@ def gen_bgp_neighbor(cs, ntype, neighbor):
 
     ff += _neighbor_in_optional(cs, neighbor, rmi)
     ff += _neighbor_out_optional(cs, neighbor, rmo)
-    ff += _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo)
+    ff += _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id)
     return ff
 
 
@@ -689,7 +706,7 @@ def gen_bgp(cs, bgp_config, router_id):
         for n in bgp_config.get(ntype, []):
             if "manual" in n and n["manual"]:
                 continue
-            cmd += gen_bgp_neighbor(cs, label, n)
+            cmd += gen_bgp_neighbor(cs, label, n, router_id)
     if "parameters" in bgp_config:
         for param in bgp_config["parameters"]:
             cmd += f"\n    set protocols bgp parameters {param}\n"
