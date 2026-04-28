@@ -526,6 +526,7 @@ def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo):
         {f"set protocols bgp neighbor {addr} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
         {f"set protocols bgp neighbor {addr} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
         {f"set protocols bgp neighbor {addr} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
+        {f"set protocols bgp neighbor {addr} local-as {neighbor['local-asn']} no-prepend replace-as" if "local-asn" in neighbor else ""}
         """
 
         if "address-family" in neighbor:
