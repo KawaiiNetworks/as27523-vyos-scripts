@@ -610,7 +610,7 @@ def gen_bgp_neighbor(cs, ntype, neighbor, router_id):
     ff = f"""
     delete policy route-map {rmi}
     set policy route-map {rmi} rule 10 action permit
-    {f"set policy route-map {rmi} rule 10 call AUTOGEN-{ntype.upper()}-IN" if asn_type == 1 else f"set policy route-map {rmi} rule 10 set as-path exclude all"}
+    {"" if ("no-in-filter" in neighbor) else (f"set policy route-map {rmi} rule 10 call AUTOGEN-{ntype.upper()}-IN" if asn_type == 1 else f"set policy route-map {rmi} rule 10 set as-path exclude all")}
     set policy route-map {rmi} rule 10 on-match next
     set policy route-map {rmi} rule 100 action permit
     set policy route-map {rmi} rule 100 on-match next
