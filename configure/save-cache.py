@@ -87,8 +87,13 @@ def fetch_pdb_info(asn):
     time.sleep(3)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
     print(f"  [PDB] Fetching AS{asn} ...")
+    headers = {}
+    api_key = os.getenv("PEERINGDB_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Api-Key {api_key}"
+        print("  [PDB] Using API KEY")
     try:
-        resp = requests.get(url, timeout=15)
+        resp = requests.get(url, timeout=15, headers=headers)
         resp.raise_for_status()
         data = resp.json()["data"]
         if not data:
