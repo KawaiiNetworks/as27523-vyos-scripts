@@ -94,7 +94,10 @@ def fetch_pdb_info(asn):
         if not data:
             raise IndexError("empty data")
         response = data[0]
-    except (IndexError, KeyError, requests.exceptions.HTTPError):
+    except requests.exceptions.HTTPError as e:
+        print(f"  [PDB] AS{asn} HTTP error from PeeringDB: {e}")
+        return None
+    except (IndexError, KeyError):
         print(f"  [PDB] AS{asn} not found in PeeringDB")
         return {
             "type": "not_found",
@@ -338,8 +341,8 @@ def save_pdb_cache(config_dir, all_asns, fill_missing):
         try:
             info = fetch_pdb_info(asn)
             if info is None:
-                print(f"  [SKIP] AS{asn}: validateASN returned non-0/1")
-                skipped += 1
+                failed += 1
+                failed_asns.append(asn)
                 continue
             write_json(path, info)
             print(f"  [OK] AS{asn} -> {path}")
