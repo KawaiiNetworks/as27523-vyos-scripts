@@ -92,6 +92,7 @@ def fetch_pdb_info(asn):
     if api_key:
         headers["Authorization"] = f"Api-Key {api_key}"
         print("  [PDB] Using API KEY")
+    not_found = False
     try:
         resp = requests.get(url, timeout=15, headers=headers)
         resp.raise_for_status()
@@ -100,9 +101,14 @@ def fetch_pdb_info(asn):
             raise IndexError("empty data")
         response = data[0]
     except requests.exceptions.HTTPError as e:
-        print(f"  [PDB] AS{asn} HTTP error from PeeringDB: {e}")
-        return None
+        if e.response is None or e.response.status_code != 404:
+            print(f"  [PDB] AS{asn} HTTP error from PeeringDB: {e}")
+            return None
+        not_found = True
     except (IndexError, KeyError):
+        not_found = True
+
+    if not_found:
         print(f"  [PDB] AS{asn} not found in PeeringDB")
         return {
             "type": "not_found",
