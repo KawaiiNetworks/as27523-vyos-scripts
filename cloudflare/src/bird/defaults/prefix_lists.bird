@@ -1,0 +1,66 @@
+# prefix_lists.bird
+# Bogon and range prefix-set definitions for BGP filtering.
+
+define autogen_ipv4_all = [
+  0.0.0.0/0{0,32}
+];
+define autogen_ipv4_range_0to7 = [
+  0.0.0.0/0{0,7}
+];
+define autogen_ipv4_range_25to32 = [
+  0.0.0.0/0{25,32}
+];
+
+define autogen_local_allowed_prefix4 = [
+  192.168.0.0/16{16,24}
+];
+
+# autogen_local_asn_prefix4 is defined dynamically in policy.bird.j2.
+
+define autogen_bogons_ipv4 = [
+  0.0.0.0/8{8,32},
+  10.0.0.0/8{8,32},
+  100.64.0.0/10{10,32},
+  127.0.0.0/8{8,32},
+  169.254.0.0/16{16,32},
+  172.16.0.0/12{12,32},
+  192.0.0.0/24{24,32},
+  192.0.2.0/24{24,32},
+  192.168.0.0/16{16,32},
+  198.18.0.0/15{15,32},
+  198.51.100.0/24{24,32},
+  203.0.113.0/24{24,32},
+  224.0.0.0/4{4,32},
+  233.252.0.0/24{24,32},
+  240.0.0.0/4{4,32},
+  255.255.255.255/32,
+  0.0.0.0/0
+];
+
+define autogen_ipv6_all = [
+  ::/0{0,128}
+];
+define autogen_ipv6_range_0to15 = [
+  ::/0{0,15}
+];
+define autogen_ipv6_range_49to128 = [
+  ::/0{49,128}
+];
+
+define autogen_local_allowed_prefix6 = [
+  fd00:192:168::/48{48,64}
+];
+
+# autogen_local_asn_prefix6 is defined dynamically in policy.bird.j2.
+
+define autogen_bogons_ipv6 = [
+  ::/8{8,128},
+  0100::/64{64,128},
+  2001:2::/48{48,128},
+  2001:10::/28{28,128},
+  2001:db8::/32{32,128},
+  2002::/16{16,128},
+  fc00::/7{7,128},
+  fe80::/10{10,128},
+  ff00::/8{8,128}
+];

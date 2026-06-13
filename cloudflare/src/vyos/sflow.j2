@@ -1,0 +1,15 @@
+delete system sflow
+set system sflow agent-address {{ sflow['agent-address'] }}
+{% for server in sflow.server %}
+set system sflow server {{ server.address }} port {{ server.port }}
+{% endfor %}
+{% for iface in sflow.interface %}
+set system sflow interface {{ iface }}
+{% endfor %}
+{% if sflow['vpp-interface'] %}
+set system sflow vpp
+{% for iface in sflow['vpp-interface'] %}
+set vpp sflow interface {{ iface }}
+set system sflow interface {{ iface }}
+{% endfor %}
+{% endif %}

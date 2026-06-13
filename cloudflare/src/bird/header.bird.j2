@@ -1,0 +1,137 @@
+# BIRD3 Configuration - Header Section
+# Generated for AS{{ local_asn }}
+# Router ID: {{ router_id }}
+
+{% if cs.warnings %}
+# WARNINGS / SKIPPED ITEMS (see PARITY.md)
+{% for w in cs.warnings %}
+#   - {{ w }}
+{% endfor %}
+{% endif %}
+log "/etc/bird/bird.log" all;
+router id {{ router_id }};
+define local_asn = {{ cs.local_asn }};
+
+# Load defaults and policy lists (merged during generation)
+# NOTE: BIRD requires define-before-use. The dynamic policy defines
+# (blacklist / local-asn prefix sets / custom lists) and the RPKI ROA tables
+# must precede defaults/filters.bird, which references all of them.
+{% include "defaults/prefix_lists.bird" %}
+{% include "defaults/as_paths.bird" %}
+{% include "defaults/communities.bird" %}
+{% include "policy.bird.j2" %}
+{% include "rpki.bird.j2" %}
+{% include "defaults/filters.bird" %}
+
+# Per-AS filtering data and per-neighbor filters / protocols
+{% include "as_filters.bird.j2" %}
+# VRF tables/protocols — BEFORE neighbors so VRF BGP channels can reference the tables
+{% include "vrf.bird.j2" %}
+{% include "neighbors.bird.j2" %}
+
+
+# ============================================================================
+# Redistribution and Kernel Protocols
+# ============================================================================
+
+{# direct + kernel are ALWAYS generated (parity with FRR: redistribute connected
+   is always on and BGP routes always reach the kernel FIB). The pre-import-accept
+   / pre-export-accept hooks and extra-import-prefixes are optional add-ons; an
+   absent direct:/kernel: block just means base behaviour (whitelist / accept). #}
+{% set direct = router_config.protocols.direct | default({}, true) %}
+{% set kernel = router_config.protocols.kernel | default({}, true) %}
+
+# Direct protocol import filters (which local routes enter BIRD and can be advertised via BGP)
+filter filter_direct_import_v4 {
+  # Base: whitelist = local-asn prefixes + extra-import-prefixes
+  if !(net ~ autogen_local_asn_prefix4{% for pfx in direct['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
+{% if direct.get('pre-import-accept') %}
+
+  # ── pre-import-accept hook ──
+{{ direct['pre-import-accept'] | indent(2, first=True) }}
+{% endif %}
+  accept;
+}
+
+filter filter_direct_import_v6 {
+  # Base: whitelist = local-asn prefixes + extra-import-prefixes
+  if !(net ~ autogen_local_asn_prefix6{% for pfx in direct['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
+{% if direct.get('pre-import-accept') %}
+
+  # ── pre-import-accept hook ──
+{{ direct['pre-import-accept'] | indent(2, first=True) }}
+{% endif %}
+  accept;
+}
+
+protocol device {
+  scan time 10;
+}
+
+protocol direct {
+  # vrf "default": only non-VRF interfaces, so VRF-interface connected routes do
+  # not leak into the main table (they belong to their own VRF direct below).
+  vrf "default";
+  ipv4 { import filter filter_direct_import_v4; };
+  ipv6 { import filter filter_direct_import_v6; };
+  interface "*";
+}
+
+# Kernel protocols for route exchange with VyOS host.
+protocol kernel {
+  ipv4 {
+    export filter {
+{% if kernel.get('ipv4') and kernel['ipv4'].get('pre-export-accept') %}
+{{ kernel['ipv4']['pre-export-accept'] | indent(6, first=True) }}
+{% endif %}
+      accept;
+    };
+    import filter filter_direct_import_v4;
+  };
+  learn;
+  persist;
+}
+
+protocol kernel {
+  ipv6 {
+    export filter {
+{% if kernel.get('ipv6') and kernel['ipv6'].get('pre-export-accept') %}
+{{ kernel['ipv6']['pre-export-accept'] | indent(6, first=True) }}
+{% endif %}
+      accept;
+    };
+    import filter filter_direct_import_v6;
+  };
+  learn;
+  persist;
+}
+
+# Static routes placeholder for locally originated prefixes.
+protocol static {
+  ipv4;
+  # Example: route 1.2.3.0/24 reject;
+}
+
+protocol static {
+  ipv6;
+  # Example: route 2001:db8::/48 reject;
+}
+
+
+# BMP Configuration
+# Used for monitoring BGP sessions.
+{% if router_config.service and router_config.service.bmp %}
+{% for target in router_config.service.bmp %}
+protocol bmp bmp_{{ loop.index }} {
+  station address ip {{ target.address }} port {{ target.port }};
+{% if target.mirror %}
+  # BIRD has no BMP route-mirroring; approximate with pre-policy monitoring.
+  monitoring rib in pre_policy on;
+  monitoring rib in post_policy off;
+{% else %}
+  monitoring rib in pre_policy off;
+  monitoring rib in post_policy on;
+{% endif %}
+}
+{% endfor %}
+{% endif %}

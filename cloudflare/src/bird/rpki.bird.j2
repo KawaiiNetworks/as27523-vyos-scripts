@@ -1,0 +1,20 @@
+# rpki.bird.j2
+# RPKI ROA tables and RTR protocols.
+
+# ROA Tables (BIRD3 syntax)
+roa4 table t_roa4;
+roa6 table t_roa6;
+
+# RPKI RTR Protocol Instances
+{% if rpki_servers %}
+{% for server in rpki_servers %}
+protocol rpki rpki_{{ loop.index }} {
+  remote "{{ server.server }}" port {{ server.port }};
+  retry 60;
+  roa4 { table t_roa4; };
+  roa6 { table t_roa6; };
+}
+{% endfor %}
+{% else %}
+# No RPKI servers configured.
+{% endif %}

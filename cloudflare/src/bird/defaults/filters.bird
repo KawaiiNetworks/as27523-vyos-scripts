@@ -1,0 +1,234 @@
+# filters.bird
+# Base filter functions for BGP policy.
+#
+# NOTE: these are bool-returning *functions*, called as predicates
+# (`if !autogen_x() then reject;`). They must use `return true/false`, NOT
+# `accept/reject` — in BIRD accept/reject terminate the whole filter rather
+# than returning from the function. The per-neighbor `_in`/`_out` are real
+# `filter`s (neighbors.bird.j2) and use accept/reject.
+
+# Default MED applied to inbound eBGP/iBGP routes by autogen_*_in. Per-neighbor
+# `metric +N / -N` adjusts relative to this (see neighbors.bird.j2).
+define default_med = 1000;
+
+# Required for RPKI (Assumes tables are defined in master config)
+# roa4 table t_roa4;
+# roa6 table t_roa6;
+
+function autogen_filter_blacklist() -> bool {
+  if net.type = NET_IP4 && net ~ autogen_prefix_blacklist then return false;
+  if net.type = NET_IP6 && net ~ autogen_prefix6_blacklist then return false;
+  if path_contains_asn_set(autogen_as_blacklist) then return false;
+  return true;
+}
+
+function autogen_reject_bogons() -> bool {
+  if net.type = NET_IP4 && net ~ autogen_bogons_ipv4 then return false;
+  if net.type = NET_IP6 && net ~ autogen_bogons_ipv6 then return false;
+  if is_bogon_as_path() then return false;
+  return true;
+}
+
+function autogen_filter_rpki() -> bool {
+  if net.type = NET_IP4 then {
+    if roa_check(t_roa4, net, bgp_path.last) = ROA_INVALID then return false;
+  }
+  if net.type = NET_IP6 then {
+    if roa_check(t_roa6, net, bgp_path.last) = ROA_INVALID then return false;
+  }
+  return true;
+}
+
+function autogen_filter_ebgp() -> bool {
+  if !autogen_reject_bogons() then return false;
+  if !autogen_filter_rpki() then return false;
+  if !autogen_filter_blacklist() then return false;
+  return true;
+}
+
+function autogen_filter_ibgp() -> bool {
+  if net.type = NET_IP4 then {
+    if net ~ autogen_local_allowed_prefix4 then return true;
+    if net ~ autogen_local_asn_prefix4 then return true;
+  }
+  if net.type = NET_IP6 then {
+    if net ~ autogen_local_allowed_prefix6 then return true;
+    if net ~ autogen_local_asn_prefix6 then return true;
+  }
+  if !autogen_reject_bogons() then return false;
+  return true;
+}
+
+# Inbound: filter (predicate) vs. attrs (side effects)
+#
+# The inbound path is split in two so a per-neighbor filter can run the filter
+# WITHOUT the attrs (e.g. skip filtering for an extra-import-prefixes match) or
+# vice versa. `autogen_*_in` (filter + attrs fused) used to do both at once.
+#
+#   autogen_filter_ebgp_in()  -> bool   eBGP inbound predicate (shared)
+#   autogen_<ntype>_attrs()             set route attrs for an accepted route
+
+# eBGP inbound predicate: RFC 7454 max prefix length + the eBGP filter core.
+# The /24 (v4) and /48 (v6) max-length lives here (inbound only) rather than in
+# autogen_filter_ebgp(), which is also used outbound — we still want to be able
+# to ORIGINATE / re-announce more-specifics, and a future blackhole inbound path
+# will deliberately skip this max-length while keeping the cone check.
+function autogen_filter_ebgp_in() -> bool {
+  if net.type = NET_IP4 && net.len > 24 then return false;
+  if net.type = NET_IP6 && net.len > 48 then return false;
+  return autogen_filter_ebgp();
+}
+
+function autogen_peer_attrs() {
+  bgp_large_community.add(large_community_from_peer);
+  bgp_local_pref = 160;
+  bgp_med = default_med;
+}
+
+function autogen_upstream_attrs() {
+  bgp_large_community.add(large_community_from_upstream);
+  bgp_local_pref = 150;
+  bgp_med = default_med;
+}
+
+function autogen_downstream_attrs() {
+  bgp_large_community.add(large_community_from_downstream);
+  bgp_local_pref = 170;
+  bgp_med = default_med;
+}
+
+function autogen_routeserver_attrs() {
+  bgp_large_community.add(large_community_from_routeserver);
+  bgp_local_pref = 130;
+  bgp_med = default_med;
+}
+
+function autogen_ibgp_attrs() {
+  bgp_large_community.add(large_community_from_ibgp);
+  bgp_local_pref = 90;
+  bgp_med = default_med;
+}
+
+# Outbound attr: apply community-driven AS-path prepend (1x..9x) toward `asn`.
+# BIRD has no counted loop, so the per-count ladder is spelled out — but it lives
+# here ONCE and is called once per neighbor (out filter), not inlined per session.
+function autogen_apply_prepend_to_as(int asn) {
+  if large_community_prepend_to_as(1, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(2, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(3, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(4, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(5, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(6, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(7, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(8, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+  if large_community_prepend_to_as(9, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
+}
+
+# Outbound Filters
+
+function autogen_peer_out() -> bool {
+  if source ~ [
+    RTS_STATIC,
+    RTS_DEVICE,
+    RTS_BGP
+  ] then {
+    # Deny IBGP routes
+    if (large_community_from_ibgp ~ bgp_large_community) then return false;
+
+    if (source ~ [
+      RTS_STATIC,
+      RTS_DEVICE
+    ]) ||
+    (large_community_from_local_as ~ bgp_large_community) ||
+    (large_community_from_downstream ~ bgp_large_community) then {
+      if !autogen_filter_ebgp() then return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+function autogen_upstream_out() -> bool {
+  if source ~ [
+    RTS_STATIC,
+    RTS_DEVICE,
+    RTS_BGP
+  ] then {
+    # Deny IBGP routes
+    if (large_community_from_ibgp ~ bgp_large_community) then return false;
+
+    if (source ~ [
+      RTS_STATIC,
+      RTS_DEVICE
+    ]) ||
+    (large_community_from_local_as ~ bgp_large_community) ||
+    (large_community_from_downstream ~ bgp_large_community) then {
+      if !autogen_filter_ebgp() then return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+function autogen_downstream_out() -> bool {
+  if source ~ [
+    RTS_STATIC,
+    RTS_DEVICE,
+    RTS_BGP
+  ] then {
+    if (source ~ [
+      RTS_STATIC,
+      RTS_DEVICE
+    ]) ||
+    (large_community_from_local_as ~ bgp_large_community) ||
+    (large_community_from_ibgp ~ bgp_large_community) ||
+    (large_community_from_upstream ~ bgp_large_community) ||
+    (large_community_from_routeserver ~ bgp_large_community) ||
+    (large_community_from_peer ~ bgp_large_community) ||
+    (large_community_from_downstream ~ bgp_large_community) then {
+      if !autogen_filter_ebgp() then return false;
+      # Downstream usually receives all routes
+      return true;
+    }
+  }
+  return false;
+}
+
+function autogen_routeserver_out() -> bool {
+  if source ~ [
+    RTS_STATIC,
+    RTS_DEVICE,
+    RTS_BGP
+  ] then {
+    # Deny IBGP routes
+    if (large_community_from_ibgp ~ bgp_large_community) then return false;
+
+    if (source ~ [
+      RTS_STATIC,
+      RTS_DEVICE
+    ]) ||
+    (large_community_from_local_as ~ bgp_large_community) ||
+    (large_community_from_downstream ~ bgp_large_community) then {
+      if !autogen_filter_ebgp() then return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+function autogen_ibgp_out() -> bool {
+  if !autogen_filter_ibgp() then return false;
+  return true;
+}
+
+function autogen_simple_ibgp_out() -> bool {
+  if net.type = NET_IP4 then {
+    if net ~ autogen_local_allowed_prefix4 then return true;
+    if net ~ autogen_local_asn_prefix4 then return true;
+  }
+  if net.type = NET_IP6 then {
+    if net ~ autogen_local_allowed_prefix6 then return true;
+    if net ~ autogen_local_asn_prefix6 then return true;
+  }
+  return false;
+}

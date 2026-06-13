@@ -2,3 +2,14 @@ name = "vyos-config-generator"
 main = "src/entry.py"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["python_workers"]
+
+# Bundle the BIRD/VyOS jinja2 templates (.j2) and BIRD default snippets (.bird)
+# as data modules so vyos_gen.py's FileSystemLoader can read them at runtime.
+base_dir = "src"
+find_additional_modules = true
+
+[[rules]]
+type = "Data"
+globs = ["**/*.j2", "**/*.bird"]
+fallthrough = true
+

@@ -4,7 +4,20 @@ HTML index page builder for the Cloudflare Worker.
 
 
 def build_index_html(config, local_asn, base_url):
-    """Build a dark-themed HTML overview page showing vyos.yaml info."""
+    """Render the dark-themed HTML overview page for a config repo.
+
+    Input:
+      config    — the parsed vyos.yaml dict (as-set-limit, keepup-as-list,
+                  blacklist, router[].protocols.bgp/rpki, ...).
+      local_asn — the local ASN, shown in the page title/header.
+      base_url  — the worker base URL (https://host/{user}/{repo}); used to
+                  build per-router download links and the defaultconfig link.
+    Return: the complete HTML document as a single str.
+
+    Pure function — reads config only, performs no I/O and mutates nothing.
+    Sections (AS-set limits, keep-up list, blacklist, RPKI) are omitted when
+    their config keys are absent/empty.
+    """
 
     css = (
         "body{font-family:monospace;max-width:960px;margin:40px auto;padding:0 20px;"
@@ -95,9 +108,11 @@ def build_index_html(config, local_asn, base_url):
     for router in config.get("router", []):
         rn = router["name"]
         script_url = f"{base_url}/router/configure.{rn}.sh"
+        bird_url = f"{base_url}/router/bird.{rn}.conf"
         p.append('<div class="section">')
         p.append(
-            f'<h3>{rn} &nbsp; <a href="{script_url}">\u2b07 configure.{rn}.sh</a></h3>'
+            f'<h3>{rn} &nbsp; <a href="{script_url}">\u2b07 configure.{rn}.sh</a>'
+            f' &nbsp; <a href="{bird_url}">\u2b07 bird.{rn}.conf</a></h3>'
         )
 
         bgp = router.get("protocols", {}).get("bgp", {})
@@ -109,7 +124,7 @@ def build_index_html(config, local_asn, base_url):
                 f'<p><span class="badge {ntype}">{ntype}</span> ({len(neighbors)} sessions)</p>'
             )
             p.append(
-                "<table><tr><th>ASN</th><th>Neighbor Address</th><th>Interface</th></tr>"
+                "<table><tr><th>ASN</th><th>Neighbor Address</th><th>Source</th></tr>"
             )
             for nb in neighbors:
                 asn_val = nb.get("asn", "?")
@@ -117,9 +132,9 @@ def build_index_html(config, local_asn, base_url):
                 if isinstance(addrs, str):
                     addrs = [addrs]
                 addr_str = "<br>".join(str(a) for a in addrs)
-                iface = nb.get("update-source", "")
+                src = nb.get("source-address", "")
                 p.append(
-                    f"<tr><td>AS{asn_val}</td><td>{addr_str}</td><td>{iface}</td></tr>"
+                    f"<tr><td>AS{asn_val}</td><td>{addr_str}</td><td>{src}</td></tr>"
                 )
             p.append("</table>")
 
@@ -137,7 +152,6 @@ def build_index_html(config, local_asn, base_url):
     p.append(
         f'<li><a href="{base_url}/router/defaultconfig.sh">defaultconfig.sh</a></li>'
     )
-    p.append(f'<li><a href="{base_url}/find_unused.py">find_unused.py</a></li>')
     p.append("</ul></body></html>")
 
     return "\n".join(p)

@@ -1,0 +1,34 @@
+#!/bin/vbash
+
+if [ "$(id -g -n)" != 'vyattacfg' ] ; then
+    exec sg vyattacfg -c "/bin/vbash $(readlink -f $0) $@"
+fi
+
+source /opt/vyatta/etc/functions/script-template
+
+ASN={{ cs.local_asn }}
+ROUTER={{ router_config.name }}
+
+echo 'start configure (bird3)'
+
+configure
+
+{{ cs.defaultconfig }}
+
+{{ configure_body }}
+
+{% if router_config["custom-config"] %}
+{{ router_config["custom-config"] }}
+{% endif %}
+
+echo 'configure done'
+
+commit
+
+# Download generated BIRD configuration
+mkdir -p /config/myapp/bird
+curl -sSfLo /config/myapp/bird/bird.conf "{{ worker_base_url }}/router/bird.{{ router_config.name }}.conf"
+
+sudo podman exec bird birdcl configure || true
+exit
+

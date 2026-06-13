@@ -1,26 +1,33 @@
 """
-Cloudflare Workers Python Worker — VyOS Config Generator
+Cloudflare Workers Python Worker — VyOS + BIRD Config Generator
 
 URL routing:
-  GET /{user}/{config_repo}/                            → index page
-  GET /{user}/{config_repo}/router/configure.{name}.sh  → router script
-  GET /{user}/{config_repo}/router/defaultconfig.sh     → default config
-  GET /{user}/{config_repo}/find_unused.py              → cleanup tool
+  GET /{user}/{config_repo}/                             → index page
+  GET /{user}/{config_repo}/router/configure.{name}.sh  → VyOS host setup script
+                                                          (container, sflow, snmp, defaults)
+  GET /{user}/{config_repo}/router/bird.{name}.conf     → generated bird.conf for the router
+  GET /{user}/{config_repo}/router/defaultconfig.sh     → VyOS default config bundle
 """
 
 from workers import Response
 
-from github import github_raw, load_yaml_config
+from github import load_yaml_config, resolve_router_id
 from cache import CacheStore
-from vyos_gen import generate_router_script
+from vyos_gen import generate_router_script, gen_bird_config
 from index_page import build_index_html
 
 
 async def on_fetch(request, env):
-    """Worker entrypoint with top-level error handling."""
+    """Worker entrypoint — wraps _handle with a catch-all 500 handler.
+
+    Input: request — the incoming JS Request (has .url); env — the Worker
+    environment bindings (unused here).
+    Return: a Response. Delegates to _handle; on any uncaught exception,
+    returns a 500 with the full traceback as plain text (for debugging).
+    """
     try:
         return await _handle(request)
-    except Exception as e:
+    except Exception:
         import traceback
 
         return Response(
@@ -31,7 +38,19 @@ async def on_fetch(request, env):
 
 
 async def _handle(request):
-    """Route the request to the appropriate handler."""
+    """Route one request to the matching handler and build its Response.
+
+    Input: request — the incoming JS Request; the path is parsed as
+    /{user}/{config_repo}/{resource}.
+    Return: a Response. Loads vyos.yaml from the config repo (404 if missing),
+    then dispatches on `resource`:
+      - router/configure.{name}.sh → VyOS host setup script
+      - router/bird.{name}.conf     → generated bird.conf
+      - router/defaultconfig.sh     → VyOS default config bundle
+      - "" (index)                  → HTML overview page
+      - anything else               → 404
+    May perform network I/O (GitHub fetches, DoH router-id resolution).
+    """
     url = request.url
     path = url.split("//", 1)[-1].split("/", 1)[-1].strip("/")
 
@@ -41,8 +60,8 @@ async def _handle(request):
             "Usage: /{user}/{config_repo}/\n\n"
             "Resources:\n"
             "  router/configure.{name}.sh\n"
-            "  router/defaultconfig.sh\n"
-            "  find_unused.py\n",
+            "  router/bird.{name}.conf\n"
+            "  router/defaultconfig.sh\n",
             headers={"content-type": "text/plain"},
         )
 
@@ -61,18 +80,20 @@ async def _handle(request):
         )
 
     local_asn = config["local-asn"]
-    scripts_repo = f"as{local_asn}-vyos-scripts"
     host = url.split("//")[1].split("/")[0]
     worker_base_url = f"https://{host}/{user}/{config_repo}"
 
-    # --- Route: generate router script ---
+    def _find_router(name):
+        """Return the router dict whose "name" == name, or None if not found."""
+        for r in config.get("router", []):
+            if r["name"] == name:
+                return r
+        return None
+
+    # --- Route: VyOS host setup script (container + services + defaults) ---
     if resource.startswith("router/configure.") and resource.endswith(".sh"):
         router_name = resource[len("router/configure.") : -len(".sh")]
-        target = None
-        for r in config.get("router", []):
-            if r["name"] == router_name:
-                target = r
-                break
+        target = _find_router(router_name)
         if target is None:
             available = [r["name"] for r in config.get("router", [])]
             return Response(
@@ -82,14 +103,31 @@ async def _handle(request):
             )
         cs = CacheStore()
         await cs.preload_all(user, config_repo, config)
-        # Also replace ${WORKER_BASE_URL} in defaults
         cs.defaultconfig = cs.defaultconfig.replace(
             r"${WORKER_BASE_URL}", worker_base_url
         )
-        script = await generate_router_script(cs, target)
+        script = await generate_router_script(cs, target, worker_base_url)
         return Response(script, headers={"content-type": "text/plain; charset=utf-8"})
 
-    # --- Route: default config ---
+    # --- Route: generated bird.conf ---
+    elif resource.startswith("router/bird.") and resource.endswith(".conf"):
+        router_name = resource[len("router/bird.") : -len(".conf")]
+        target = _find_router(router_name)
+        if target is None:
+            return Response(
+                "Router not found",
+                status=404,
+                headers={"content-type": "text/plain"},
+            )
+        cs = CacheStore()
+        await cs.preload_all(user, config_repo, config)
+        router_id = target.get("router-id") or await resolve_router_id(target["name"])
+        bird_conf = gen_bird_config(cs, target, router_id)
+        return Response(
+            bird_conf, headers={"content-type": "text/plain; charset=utf-8"}
+        )
+
+    # --- Route: default config bundle ---
     elif resource == "router/defaultconfig.sh":
         cs = CacheStore()
         cs.local_asn = local_asn
@@ -101,20 +139,6 @@ async def _handle(request):
             cs.defaultconfig,
             headers={"content-type": "text/plain; charset=utf-8"},
         )
-
-    # --- Route: find_unused.py ---
-    elif resource == "find_unused.py":
-        template = await github_raw(user, scripts_repo, "configure/find_unused.py")
-        if template is None:
-            return Response(
-                "find_unused.py not found",
-                status=404,
-                headers={"content-type": "text/plain"},
-            )
-        template = template.replace(
-            r"${default_config_url}", f"{worker_base_url}/router/defaultconfig.sh"
-        )
-        return Response(template, headers={"content-type": "text/plain; charset=utf-8"})
 
     # --- Route: index page ---
     elif resource == "" or resource == "/":

@@ -7,27 +7,31 @@
 -   update all managed configurations periodically
 
 This repository provides the logic and default templates used to configure a VyOS router for an ISP.
-The generated scripts manage the following sections:
+The router runs **BIRD3** inside a container; VyOS itself only handles the host plumbing.
+
+The generated **VyOS host script** (`configure.{router}.sh`) manages:
 
 ```
+system host-name
 system task-scheduler task update-config
-policy as-path-list
-policy prefix-list
-policy prefix-list6
-policy large-community-list
-policy route-map
-protocols rpki
-protocols bgp address-family
-protocols bgp parameters
-protocols bgp system-as
-protocols bgp neighbor
-protocols bgp bmp
-system frr
+container name bird          (the BIRD3 container)
 system sflow
 service snmp
-system ip protocol bgp
-system ipv6 protocol bgp
 ```
+
+The generated **`bird.conf`** (served separately, run inside the container) manages all routing policy:
+
+```
+RPKI ROA tables + RTR protocols
+prefix / as-path / community filter sets (autogen defaults)
+per-neighbor import/export filters
+BGP protocol instances (upstream / downstream / peer / routeserver / ibgp)
+kernel + direct + static protocols (redistribution)
+BMP monitoring
+```
+
+> The previous **vyos + FRR** generator (which emitted `policy route-map`, `protocols bgp neighbor`,
+> `system frr`, etc. as VyOS `set` commands) is retired under `deprecated/`.
 
 ## Current Architecture
 
@@ -35,10 +39,11 @@ system ipv6 protocol bgp
 -   This repository stores the generator code, default templates, helper tools, and the Cloudflare Worker.
 -   `configure/save-cache.py` prepares `cache/pdb/summary.json`, `cache/bgpq4/summary.json`, `cache/as-set/summary.json`, and `cache/defaults_bundle.txt` for the config repository.
 -   The Cloudflare Worker reads `vyos.yaml` and the cache files directly from GitHub, then serves:
-    -   `/{user}/{config_repo}/router/configure.{router}.sh`
-    -   `/{user}/{config_repo}/router/defaultconfig.sh`
-    -   `/{user}/{config_repo}/find_unused.py`
+    -   `/{user}/{config_repo}/router/configure.{router}.sh` — VyOS host setup script
+    -   `/{user}/{config_repo}/router/bird.{router}.conf` — generated `bird.conf` for the router
+    -   `/{user}/{config_repo}/router/defaultconfig.sh` — VyOS default config bundle
 -   The default scheduler downloads the latest script from the Worker every 12 hours and applies it on the router.
+    The host script in turn fetches `bird.{router}.conf` into the container and reloads BIRD.
 
 ## How to use
 

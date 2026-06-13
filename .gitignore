@@ -1,2 +1,10 @@
 .vscode/
 configure/outputs/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+__pycache__/
+*.pyc
+tests/results/
+deprecated/
+tmp/

@@ -1,0 +1,101 @@
+{
+  "27523": {
+    "type": "normal",
+    "name": "Kawaii Networks",
+    "as_set": [
+      "AS27523"
+    ],
+    "max_prefix": [
+      24,
+      48
+    ]
+  },
+  "3491": {
+    "type": "normal",
+    "name": "PCCW",
+    "as_set": [
+      "AS3491"
+    ],
+    "max_prefix": [
+      100,
+      200
+    ]
+  },
+  "6453": {
+    "type": "normal",
+    "name": "Tata Communications",
+    "as_set": [
+      "AS6453"
+    ],
+    "max_prefix": [
+      100,
+      200
+    ]
+  },
+  "6939": {
+    "type": "normal",
+    "name": "Hurricane Electric",
+    "as_set": [
+      "AS6939"
+    ],
+    "max_prefix": [
+      100,
+      200
+    ]
+  },
+  "13335": {
+    "type": "normal",
+    "name": "Cloudflare",
+    "as_set": [
+      "AS13335"
+    ],
+    "max_prefix": [
+      1000,
+      2000
+    ]
+  },
+  "15169": {
+    "type": "normal",
+    "name": "Google",
+    "as_set": [
+      "AS15169"
+    ],
+    "max_prefix": [
+      300,
+      400
+    ]
+  },
+  "20473": {
+    "type": "normal",
+    "name": "Choopa",
+    "as_set": [
+      "AS20473"
+    ],
+    "max_prefix": [
+      50,
+      60
+    ]
+  },
+  "65500": {
+    "type": "private",
+    "name": "Private downstream",
+    "as_set": [
+      "AS65500"
+    ],
+    "max_prefix": [
+      100,
+      200
+    ]
+  },
+  "395909": {
+    "type": "normal",
+    "name": "Interface downstream",
+    "as_set": [
+      "AS395909"
+    ],
+    "max_prefix": [
+      70,
+      80
+    ]
+  }
+}

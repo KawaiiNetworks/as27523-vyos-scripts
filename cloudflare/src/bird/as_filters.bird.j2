@@ -1,0 +1,107 @@
+# as_filters.bird.j2
+# Per-AS Prefix Sets and AS-Path (Cone Member) Sets.
+
+{% macro render_prefix_set(asn, ipversion, set_suffix,
+                       exceeds_map, matrix_map,
+                       limits, large_as_list) %}
+{% set prefix_list = matrix_map.get((ipversion, asn), []) %}
+{% set exceeds = (ipversion, asn) in exceeds_map or (prefix_list | length) > limits.get('prefix-limit', 1000) %}
+{# Cone/prefix sets carry the peer's true IRR space down to /32 (v4) /128 (v6),
+   so IRR objects more specific than /24/48 are retained (not dropped) and a
+   future blackhole path can match them. RFC 7454 max-length (reject >/24, >/48)
+   is enforced separately in autogen_filter_ebgp_in (defaults/filters.bird). #}
+{% set max_length = 32 if ipversion == 4 else 128 %}
+define autogen_as{{ asn }}_{{ set_suffix }}{{ ipversion }} = [
+{% if exceeds %}
+{% if asn in large_as_list %}
+  {{ "0.0.0.0/0{0,24}" if ipversion == 4 else "::/0{0,48}" }}
+{% endif %}
+{% else %}
+{% for prefix in prefix_list %}
+{% set net = prefix[0] %}
+{% set plen = prefix[1] | int %}
+{% set ge = prefix[2] | int %}
+{% set le = prefix[3] | int %}
+{% set le_final = (max_length if max_length < le else le) | int %}
+{% if ge <= plen and plen <= le_final %}
+  {{ net }}/{{ plen }}{% if ge != plen or le_final != plen %}{{ '{' }}{{ ge }},{{ le_final }}{{ '}' }}{% endif %}{{ "," if not loop.last }}
+{% endif %}
+{% endfor %}
+{% endif %}
+];
+{% endmacro %}
+
+{# Connected ASNs across the default context AND every VRF (defines are global
+   and shared, so VRF peers' cone/prefix sets are generated here too). IBGP uses
+   the local ASN, not a connected ASN, so it is excluded. #}
+{% set connected_asns = [] %}
+{% for ntype, n in router_config['_render_neighbors'] %}{% if ntype != 'IBGP' %}{% set _ = connected_asns.append(n.asn) %}{% endif %}{% endfor %}
+{% set connected_asns = connected_asns | unique | sort %}
+
+{% for asn in connected_asns %}
+
+# ---------------------------------------------------------------------------
+# AS{{ asn }} Filtering Data
+# ---------------------------------------------------------------------------
+
+{% if asn in cs.bad_asn_set %}
+# AS{{ asn }} is in BAD-ASN set. All prefixes and paths will be rejected.
+define autogen_as{{ asn }}_prefix4 = [];
+define autogen_as{{ asn }}_prefix6 = [];
+define autogen_as{{ asn }}_cone_prefix4 = [];
+define autogen_as{{ asn }}_cone_prefix6 = [];
+define autogen_as{{ asn }}_cone_asns = [];
+
+function autogen_as{{ asn }}_validate_path() -> bool { return false; }
+
+{% else %}
+
+# Direct Prefix Sets
+{{ render_prefix_set(asn, 4, "prefix", 
+                     cs.cone_prefix_exceeds, cs.prefix_matrix_map, 
+                     cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
+{{ render_prefix_set(asn, 6, "prefix", 
+                     cs.cone_prefix_exceeds, cs.prefix_matrix_map, 
+                     cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
+
+# Cone Prefix Sets (for downstream/peers)
+{{ render_prefix_set(asn, 4, "cone_prefix", 
+                     cs.cone_prefix_exceeds, cs.cone_prefix_matrix_map, 
+                     cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
+{{ render_prefix_set(asn, 6, "cone_prefix", 
+                     cs.cone_prefix_exceeds, cs.cone_prefix_matrix_map, 
+                     cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
+
+# AS-Path (Cone ASN set) logic
+{% set cone_list = cs.cone_map.get(asn, []) %}
+{% set path_exceeds = asn in cs.cone_members_exceeds or (cone_list | length) + 1 > cs.config['as-set-limit'].get('member-limit', 100) %}
+
+{% if path_exceeds %}
+  {% if asn in cs.config['as-set-limit']['large-as-list'] %}
+# AS{{ asn }} exceeds member-limit but is LARGE-AS. Permit any path starting with {{ asn }}.
+function autogen_as{{ asn }}_validate_path() -> bool {
+  return bgp_path.first = {{ asn }};
+}
+  {% else %}
+# AS{{ asn }} exceeds member-limit and is NOT LARGE-AS. Reject.
+function autogen_as{{ asn }}_validate_path() -> bool { return false; }
+  {% endif %}
+{% else %}
+# Standard AS-Path validation using cone members.
+{% set cone_asns_all = ([asn] + cone_list) | unique | list %}
+define autogen_as{{ asn }}_cone_asns = [
+{% for member in cone_asns_all %}
+  {{ member }}{{ "," if not loop.last }}
+{% endfor %}
+];
+
+function autogen_as{{ asn }}_validate_path() -> bool {
+  if bgp_path.first != {{ asn }} then return false;
+  if bgp_path.last ~ autogen_as{{ asn }}_cone_asns then return true;
+  return false;
+}
+{% endif %}
+
+{% endif %}
+
+{% endfor %}

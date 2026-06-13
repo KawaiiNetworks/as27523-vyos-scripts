@@ -1,0 +1,94 @@
+# as_paths.bird
+# AS path helper functions and well-known ASN sets for BIRD filters.
+
+# Tier 1 ASNs — keep in sync with TIER1_ASNS in cloudflare/src/cache.py
+define autogen_as_tier1_asns = [
+  174,
+  701,
+  1299,
+  2914,
+  3257,
+  3320,
+  3356,
+  3491,
+  5511,
+  6453,
+  6461,
+  6762,
+  6830,
+  6939,
+  7018,
+  12956
+];
+
+# China ASNs
+define autogen_as_china_asns = [
+  4837,
+  9929,
+  4134,
+  4809,
+  58453,
+  9808,
+  23910,
+  23911,
+  4538
+];
+
+# Cernet ASNs
+define autogen_as_cernet_asns = [
+  23910,
+  23911,
+  4538
+];
+
+# Helper function to check if any ASN in the path belongs to a set
+# (e.g. path_contains_asn_set(autogen_as_china_asns) for a China check)
+function path_contains_asn_set(int set asns) -> bool {
+  for int asn in bgp_path do {
+    if asn ~ asns then return true;
+  }
+  return false;
+}
+
+# Convenience wrappers over the well-known ASN sets above.
+function is_china_as_path() -> bool {
+  return path_contains_asn_set(autogen_as_china_asns);
+}
+
+function is_not_china_as_path() -> bool {
+  return !is_china_as_path();
+}
+
+function is_cernet_as_path() -> bool {
+  return path_contains_asn_set(autogen_as_cernet_asns);
+}
+
+function is_tier1_as_path() -> bool {
+  return path_contains_asn_set(autogen_as_tier1_asns);
+}
+
+# Check if any ASN in the path is a bogon (reserved/private)
+function is_bogon_as_path() -> bool {
+  # Reserved and Private ASNs
+  # RFC 6996, RFC 7300, RFC 5398, RFC 1930
+  for int asn in bgp_path do {
+    if asn = 0 then return true;
+    # AS_TRANS
+    if asn = 23456 then return true;
+    # RFC 5398 Doc ASNs
+    if asn ~ [ 64496..64511 ] then return true;
+    # RFC 6996 Private ASNs
+    if asn ~ [ 64512..65534 ] then return true;
+    # RFC 7300 Reserved
+    if asn = 65535 then return true;
+    # RFC 5398 Doc ASNs (32-bit)
+    if asn ~ [ 65536..65551 ] then return true;
+    # RFC 5398 Doc ASNs (32-bit)
+    if asn ~ [ 131072..131073 ] then return true;
+    # RFC 6996 Private ASNs (32-bit)
+    if asn ~ [ 4200000000..4294967294 ] then return true;
+    # RFC 7300 Reserved (32-bit)
+    if asn = 4294967295 then return true;
+  }
+  return false;
+}

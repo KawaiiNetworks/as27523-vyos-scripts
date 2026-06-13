@@ -194,12 +194,16 @@ def aggregate_prefixes_modified(prefix_matrix, ipversion):
         return []
     prefixes = [f"{p[0]}/{p[1]}" for p in prefix_matrix]
     prefixes = list(aggregate_prefixes(prefixes))
+    # le = /32 (v4) /128 (v6): keep the peer's full IRR space, including objects
+    # more specific than /24/48, so the generated cone/prefix sets represent it
+    # faithfully. RFC 7454 max-length (reject >/24, >/48) is applied in the BIRD
+    # filter (autogen_filter_ebgp_in), not by truncating the set here.
     return [
         [
             str(p.network_address),
             str(p.prefixlen),
             str(p.prefixlen),
-            str(24 if ipversion == 4 else 48),
+            str(32 if ipversion == 4 else 128),
         ]
         for p in prefixes
     ]
@@ -727,7 +731,11 @@ def main():
     parser.add_argument(
         "--defaults-bundle",
         action="store_true",
-        help="Build defaults_bundle.txt from scripts repo defaults/ directory",
+        help=(
+            "Build defaults_bundle.txt from scripts repo defaults/ directory "
+            "(now only system/ defaults, e.g. the update-config scheduler; the "
+            "FRR policy defaults were retired — see deprecated/)"
+        ),
     )
     parser.add_argument(
         "--scripts-dir",

@@ -1,0 +1,12 @@
+delete service snmp
+set service snmp listen-address {{ snmp['listen-address'] }}
+set service snmp location '{{ snmp.location }}'
+set service snmp v3 engineid {{ engineid }}
+set service snmp v3 group default mode ro
+set service snmp v3 group default view default
+set service snmp v3 user vyos auth encrypted-password {{ snmp['encrypted-password'] }}
+set service snmp v3 user vyos auth type sha
+set service snmp v3 user vyos group default
+set service snmp v3 user vyos privacy encrypted-password {{ snmp['encrypted-password'] }}
+set service snmp v3 user vyos privacy type aes
+set service snmp v3 view default oid 1

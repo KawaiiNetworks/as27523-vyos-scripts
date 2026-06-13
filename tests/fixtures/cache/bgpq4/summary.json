@@ -1,0 +1,104 @@
+{
+  "27523": {
+    "cone_members": [],
+    "prefix4": [
+      [
+        "203.0.113.0",
+        "24",
+        "24",
+        "32"
+      ]
+    ],
+    "prefix6": [
+      [
+        "2001:db8:2752::",
+        "48",
+        "48",
+        "128"
+      ]
+    ],
+    "cone_prefix4": [],
+    "cone_prefix6": []
+  },
+  "13335": {
+    "cone_members": [],
+    "cone_members_exceeds": true,
+    "prefix4": [],
+    "prefix6": [],
+    "cone_prefix4": [],
+    "cone_prefix4_exceeds": true,
+    "cone_prefix6": [],
+    "cone_prefix6_exceeds": true
+  },
+  "15169": {
+    "cone_members": [
+      15169,
+      15170
+    ],
+    "prefix4": [],
+    "prefix6": [],
+    "cone_prefix4": [
+      [
+        "198.51.100.0",
+        "24",
+        "24",
+        "32"
+      ]
+    ],
+    "cone_prefix6": [
+      [
+        "2001:db8:1516::",
+        "48",
+        "48",
+        "128"
+      ]
+    ]
+  },
+  "20473": {
+    "cone_members": [
+      20473,
+      0
+    ],
+    "prefix4": [],
+    "prefix6": [],
+    "cone_prefix4": [
+      [
+        "192.0.2.0",
+        "24",
+        "24",
+        "32"
+      ]
+    ],
+    "cone_prefix6": [
+      [
+        "2001:db8:2047::",
+        "48",
+        "48",
+        "128"
+      ]
+    ]
+  },
+  "395909": {
+    "cone_members": [
+      395909
+    ],
+    "prefix4": [],
+    "prefix6": [],
+    "cone_prefix4": [
+      [
+        "198.51.100.128",
+        "25",
+        "25",
+        "32"
+      ]
+    ],
+    "cone_prefix6": [
+      [
+        "2001:db8:3959::",
+        "48",
+        "48",
+        "128"
+      ]
+    ]
+  }
+}

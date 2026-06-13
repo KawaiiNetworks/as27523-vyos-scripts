@@ -1,0 +1,60 @@
+# communities.bird
+# Large community definitions for route-origin signalling and TE control.
+
+# Single Communities
+define large_community_from_local_as = (local_asn, 0, 10);
+define large_community_from_ibgp = (local_asn, 0, 100);
+define large_community_from_upstream = (local_asn, 0, 200);
+define large_community_from_routeserver = (local_asn, 0, 300);
+define large_community_from_peer = (local_asn, 0, 400);
+define large_community_from_downstream = (local_asn, 0, 500);
+
+# Community Sets
+define large_community_dna_any = [
+  (local_asn, 1000, 0),
+  (local_asn, 1001, 0)
+];
+define large_community_ola_all = [
+  (local_asn, 1100, *),
+  (local_asn, 1101, *)
+];
+
+# ---------------------------------------------------------------------------
+# Named community generators (scheme: local_asn:function:parameter)
+# https://net.projectk.org/community.html
+#
+# BIRD has no parametric `define`, so the per-ASN / per-neighbor-id communities
+# are emitted as functions returning an `lc`. Call them where a community is
+# used instead of writing the raw (asn, fn, param) tuple, e.g.
+#   bgp_large_community.add(large_community_from_neighbor_id(29200));
+#   if large_community_only_announce_to_as(6939) ~ bgp_large_community then ...
+# ---------------------------------------------------------------------------
+
+# Information (route origin)
+function large_community_from_as(int asn) -> lc { return (local_asn, 10000, asn); }
+function large_community_from_neighbor_id(int nid) -> lc { return (local_asn, 10001, nid); }
+
+# Control — do-not-announce (DNA)
+function large_community_do_not_announce_to_as(int asn) -> lc { return (local_asn, 1000, asn); }
+function large_community_do_not_announce_to_neighbor_id(int nid) -> lc { return (local_asn, 1001, nid); }
+
+# Control — only-announce (OLA)
+function large_community_only_announce_to_as(int asn) -> lc { return (local_asn, 1100, asn); }
+function large_community_only_announce_to_neighbor_id(int nid) -> lc { return (local_asn, 1101, nid); }
+
+# Control — AS-path prepend toward an AS, N times (scheme 2000+N, N = 1..9).
+function large_community_prepend_to_as(int times; int asn) -> lc { return (local_asn, 2000 + times, asn); }
+
+# ---------------------------------------------------------------------------
+# Blackhole
+# Accept three forms as a blackhole signal: the RFC 7999 well-known standard
+# community 65535:666, our own standard local_asn:666, and the large
+# local_asn:666:0 (function 666, parameter 0). All are "blackhole" regardless
+# of source.
+# ---------------------------------------------------------------------------
+function check_blackhole() -> bool {
+  if (65535, 666) ~ bgp_community then return true;
+  if (local_asn, 666) ~ bgp_community then return true;
+  if (local_asn, 666, 0) ~ bgp_large_community then return true;
+  return false;
+}

@@ -1,0 +1,86 @@
+# ============================================================================
+# VRF routing contexts
+# ============================================================================
+{# Each VRF is an isolated routing context mirroring the default one: its own
+   ipv4/ipv6 tables, an always-on direct (connected) + kernel (FIB sync to the
+   VRF's Linux table) + empty static placeholder. The VRF's BGP sessions
+   (neighbors.bird.j2) bind to it via `vrf "<name>"` and channel `table`.
+   `vid` is the sanitized identifier (vrf_<vid>_*); `vname` is the OS device.
+   Included BEFORE neighbors.bird.j2 so the `ipv4/ipv6 table vrf_<vid>_*` are
+   defined before the BGP channels reference them (BIRD requires define-first). #}
+{% macro render_vrf(vname, vid, table, vdirect, vkernel) %}
+# ----------------------------------------------------------------------------
+# VRF {{ vname }} (table {{ table }})
+# ----------------------------------------------------------------------------
+ipv4 table vrf_{{ vid }}_v4;
+ipv6 table vrf_{{ vid }}_v6;
+
+filter filter_direct_vrf_{{ vid }}_import_v4 {
+  # Base: whitelist = local-asn prefixes + extra-import-prefixes
+  if !(net ~ autogen_local_asn_prefix4{% for pfx in vdirect['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
+{% if vdirect.get('pre-import-accept') %}
+
+  # ── pre-import-accept hook ──
+{{ vdirect['pre-import-accept'] | indent(2, first=True) }}
+{% endif %}
+  accept;
+}
+
+filter filter_direct_vrf_{{ vid }}_import_v6 {
+  # Base: whitelist = local-asn prefixes + extra-import-prefixes
+  if !(net ~ autogen_local_asn_prefix6{% for pfx in vdirect['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
+{% if vdirect.get('pre-import-accept') %}
+
+  # ── pre-import-accept hook ──
+{{ vdirect['pre-import-accept'] | indent(2, first=True) }}
+{% endif %}
+  accept;
+}
+
+protocol direct direct_vrf_{{ vid }} {
+  vrf "{{ vname }}";
+  ipv4 { table vrf_{{ vid }}_v4; import filter filter_direct_vrf_{{ vid }}_import_v4; };
+  ipv6 { table vrf_{{ vid }}_v6; import filter filter_direct_vrf_{{ vid }}_import_v6; };
+  interface "*";
+}
+
+protocol kernel kernel_vrf_{{ vid }}_v4 {
+  vrf "{{ vname }}";
+  kernel table {{ table }};
+  ipv4 {
+    table vrf_{{ vid }}_v4;
+    export filter {
+{% if vkernel.get('ipv4') and vkernel['ipv4'].get('pre-export-accept') %}
+{{ vkernel['ipv4']['pre-export-accept'] | indent(6, first=True) }}
+{% endif %}
+      accept;
+    };
+    import filter filter_direct_vrf_{{ vid }}_import_v4;
+  };
+  learn;
+  persist;
+}
+
+protocol kernel kernel_vrf_{{ vid }}_v6 {
+  vrf "{{ vname }}";
+  kernel table {{ table }};
+  ipv6 {
+    table vrf_{{ vid }}_v6;
+    export filter {
+{% if vkernel.get('ipv6') and vkernel['ipv6'].get('pre-export-accept') %}
+{{ vkernel['ipv6']['pre-export-accept'] | indent(6, first=True) }}
+{% endif %}
+      accept;
+    };
+    import filter filter_direct_vrf_{{ vid }}_import_v6;
+  };
+  learn;
+  persist;
+}
+
+protocol static static_vrf_{{ vid }}_v4 { ipv4 { table vrf_{{ vid }}_v4; }; }
+protocol static static_vrf_{{ vid }}_v6 { ipv6 { table vrf_{{ vid }}_v6; }; }
+{% endmacro %}
+{% for vname, vcfg in (router_config.vrf or {}).items() %}
+{{ render_vrf(vname, vname | lower | replace('-', '_'), vcfg.table, (vcfg.get('protocols', {}) or {}).get('direct', {}) or {}, (vcfg.get('protocols', {}) or {}).get('kernel', {}) or {}) }}
+{% endfor %}

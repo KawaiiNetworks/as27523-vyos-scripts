@@ -1,15 +1,23 @@
 """
-VyOS configuration command generation for the Cloudflare Worker.
-
-All functions take a CacheStore (cs) instance instead of using module-level
-globals.
+VyOS + BIRD3 configuration generation.
+Uses Jinja2 templates for command/config generation.
 """
 
 import hashlib
 import ipaddress
+import os
+from jinja2 import Environment, FileSystemLoader
 
 from cache import validate_asn, TIER1_ASNS
 from github import resolve_router_id
+
+# Initialize Jinja2 environment for VyOS scripts
+template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vyos')
+env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
+
+# Initialize Jinja2 environment for BIRD configuration
+bird_template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bird')
+bird_env = Environment(loader=FileSystemLoader(bird_template_path), trim_blocks=True, lstrip_blocks=True)
 
 
 # ---------------------------------------------------------------------------
@@ -18,7 +26,11 @@ from github import resolve_router_id
 
 
 def is_ip(s):
-    """Check if a string is a valid IP address."""
+    """Check whether a string is a valid IP address.
+
+    Input: s — a candidate address string.
+    Return: True if it parses as an IPv4 or IPv6 address, else False.
+    """
     try:
         ipaddress.ip_address(s)
         return True
@@ -26,8 +38,37 @@ def is_ip(s):
         return False
 
 
+def is_unnumbered(s):
+    """Check whether a string is a BIRD unnumbered neighbor address.
+
+    Input: s — a candidate neighbor-address string.
+    Return: True if it has the form "<link-local-IPv6>%<iface>" (e.g.
+    "fe80::1%wg"), which BIRD accepts for unnumbered / interface BGP. Plain
+    IPs and bare interface names return False.
+    """
+    if "%" not in str(s):
+        return False
+    addr, _, iface = str(s).partition("%")
+    if not iface:
+        return False
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    return ip.version == 6 and ip.is_link_local
+
+
 def get_neighbor_id(cs, neighbor):
-    """Generate a unique numeric neighbor ID from ASN + addresses."""
+    """Derive a stable unique numeric ID (nid) for a neighbor.
+
+    Input: cs — the CacheStore (its neighbor_id_hashmap is read+written);
+    neighbor — a neighbor dict (uses its "asn" and "neighbor-address").
+    Return: an int nid in [1, 65536], a hash of ASN + sorted addresses.
+
+    Side effect: records nid -> raw-key in cs.neighbor_id_hashmap. Raises
+    ValueError on a hash collision (two different neighbors mapping to the
+    same nid).
+    """
     addrs = neighbor["neighbor-address"]
     if not isinstance(addrs, list):
         addrs = [addrs]
@@ -41,104 +82,73 @@ def get_neighbor_id(cs, neighbor):
 
 
 def ipv4_to_engineid(ipv4):
-    """Convert an IPv4 address to an SNMP engine ID string."""
+    """Encode an IPv4 address as an SNMP v3 engine-ID string.
+
+    Input: ipv4 — a dotted-quad IPv4 string (e.g. "192.0.2.254").
+    Return: "000000000000" + each octet zero-padded to 3 digits
+    (e.g. "000000000000192000002254").
+    """
     return "000000000000" + "".join(part.zfill(3) for part in ipv4.split("."))
 
 
 # ---------------------------------------------------------------------------
-# Community / filter generators
+# Pre-processing pass
 # ---------------------------------------------------------------------------
+#
+# The FRR generator (deprecated/cloudflare/vyos_gen.py) populated cs.bad_asn_set,
+# neighbor ids, local prefix lists, etc. as *side effects* while generating
+# commands. The BIRD path is pure template rendering, so nothing fills those
+# in. This pass replicates the FRR side effects before the templates run.
 
 
-def gen_as_community(cs, asn):
+def _local_asn_prefixes(cs, ipversion):
+    """Build the local-ASN prefix-set members for a `define` in policy.bird.j2.
+
+    Input: cs — the CacheStore (reads cs.local_asn and cs.prefix_matrix_map);
+    ipversion — 4 or 6.
+    Return: a list of BIRD prefix strings for the local ASN's announced
+    prefixes, e.g. ["203.0.113.0/24{24,32}", ...]. A prefix renders bare
+    (no {ge,le}) when ge == len == le, otherwise with the {ge,le} suffix
+    (le capped at 32/128). Rows whose ge..le range does not contain len are
+    dropped.
+    """
     la = cs.local_asn
-    return f"""
-    delete policy large-community-list AUTOGEN-DNA-AS{asn}
-    set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-DNA-AS{asn} rule 10 regex "{la}:1000:{asn}"
-    delete policy large-community-list AUTOGEN-OLA-AS{asn}
-    set policy large-community-list AUTOGEN-OLA-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-OLA-AS{asn} rule 10 regex "{la}:1100:{asn}"
-    delete policy large-community-list AUTOGEN-Prepend-1X-AS{asn}
-    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-Prepend-1X-AS{asn} rule 10 regex "{la}:2001:{asn}"
-    delete policy large-community-list AUTOGEN-Prepend-2X-AS{asn}
-    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-Prepend-2X-AS{asn} rule 10 regex "{la}:2002:{asn}"
+    matrix = cs.prefix_matrix_map.get((ipversion, la), [])
+    max_length = 32 if ipversion == 4 else 128
+    out = []
+    for network, length, ge, le in matrix:
+        le_final = min(int(le), max_length)
+        if int(ge) <= int(length) <= le_final:
+            if int(ge) == int(length) and le_final == int(length):
+                out.append(f"{network}/{length}")
+            else:
+                out.append(f"{network}/{length}{{{ge},{le_final}}}")
+    return out
+
+
+def _detect_bad_asn(cs, asn):
+    """Flag an ASN as "bad" (session to be shut down) per cone/limit checks.
+
+    Input: cs — the CacheStore (reads cs.config, cs.cone_map,
+    cs.cone_members_exceeds, cs.cone_prefix_matrix_map, cs.cone_prefix_exceeds);
+    asn — the ASN to evaluate.
+    No return value. Side effects: adds asn to cs.bad_asn_set when any of the
+    following hold, and appends a warning for the AS0 / Tier1 cases:
+      - cone contains AS0 (warns: contamination)
+      - cone contains a Tier1 AS and asn itself is not Tier1 (warns)
+      - cone member count exceeds member-limit (unless asn is large-as-listed)
+      - cone prefix count (v4 or v6) exceeds prefix-limit (unless large-as)
+    A bad ASN's BGP protocol is later rendered with `disabled;` unless the ASN
+    is in keepup-as-list (handled in the template).
     """
+    config = cs.config
+    large_as_list = config.get("as-set-limit", {}).get("large-as-list", [])
+    member_limit = config.get("as-set-limit", {}).get("member-limit", 1000)
 
-
-def gen_blacklist_filter(cs, blacklist_config):
-    cmd = """
-    delete policy as-path-list AUTOGEN-AS-BLACKLIST
-    set policy as-path-list AUTOGEN-AS-BLACKLIST
-    delete policy prefix-list AUTOGEN-PREFIX-BLACKLIST
-    set policy prefix-list AUTOGEN-PREFIX-BLACKLIST
-    delete policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
-    set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST
-    delete policy route-map AUTOGEN-FILTER-BLACKLIST
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 10 action deny
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 10 match as-path AUTOGEN-AS-BLACKLIST
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 action deny
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 20 match ip address prefix-list AUTOGEN-PREFIX-BLACKLIST
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 action deny
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 30 match ipv6 address prefix-list AUTOGEN-PREFIX6-BLACKLIST
-    set policy route-map AUTOGEN-FILTER-BLACKLIST rule 100 action permit
-    """
-    as_r = 1
-    if "asn" in blacklist_config:
-        as_list = [str(x) for x in blacklist_config["asn"]]
-        for n in range(0, len(as_list), 20):
-            chunk = as_list[n : n + 20]
-            cmd += f"""
-            set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
-            set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} regex '_({"|".join(chunk)})_'
-            """
-            as_r += 1
-    if "as-set" in blacklist_config:
-        for asset_name in blacklist_config["as-set"]:
-            members = cs.blacklist_asset_members.get(asset_name, [])
-            as_list = [str(x) for x in members]
-            for n in range(0, len(as_list), 20):
-                chunk = as_list[n : n + 20]
-                cmd += f"""
-                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} action deny
-                set policy as-path-list AUTOGEN-AS-BLACKLIST rule {as_r} regex '_({"|".join(chunk)})_'
-                """
-                as_r += 1
-    p4_r = 1
-    if "prefix4" in blacklist_config:
-        for prefix in blacklist_config["prefix4"]:
-            cmd += f"""
-            set policy prefix-list AUTOGEN-PREFIX-BLACKLIST rule {p4_r} action deny
-            set policy prefix-list AUTOGEN-PREFIX-BLACKLIST rule {p4_r} prefix {prefix}
-            """
-            p4_r += 1
-    p6_r = 1
-    if "prefix6" in blacklist_config:
-        for prefix in blacklist_config["prefix6"]:
-            cmd += f"""
-            set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST rule {p6_r} action deny
-            set policy prefix-list6 AUTOGEN-PREFIX6-BLACKLIST rule {p6_r} prefix {prefix}
-            """
-            p6_r += 1
-    return cmd
-
-
-# ---------------------------------------------------------------------------
-# AS path / prefix list
-# ---------------------------------------------------------------------------
-
-
-def gen_as_path(cs, asn):
-    cmd = f"""
-    delete policy as-path-list AUTOGEN-AS{asn}-IN
-    set policy as-path-list AUTOGEN-AS{asn}-IN rule 10 action permit
-    set policy as-path-list AUTOGEN-AS{asn}-IN rule 10 regex '^{asn}(_{asn})*$'
-    """
     cone_list = list(cs.cone_map.get(asn, []))
     if asn in cone_list:
         cone_list.remove(asn)
+
     if 0 in cone_list:
         cs.warnings.append(
             f"AS-SET of AS{asn} contains AS0, this session will be shutdown."
@@ -149,796 +159,288 @@ def gen_as_path(cs, asn):
             f"AS-SET of AS{asn} contains Tier1 AS, this session will be shutdown."
         )
         cs.bad_asn_set.add(asn)
-    cone_list = [str(x) for x in cone_list]
-    config = cs.config
-    if (
-        len(cone_list) + 1 > config["as-set-limit"]["member-limit"]
-        or asn in cs.cone_members_exceeds
+
+    # AS-path (cone members) limit
+    if (len(cone_list) + 1 > member_limit or asn in cs.cone_members_exceeds) and (
+        asn not in large_as_list
     ):
-        if asn in config["as-set-limit"]["large-as-list"]:
-            cmd += f"""
-            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 action permit
-            set policy as-path-list AUTOGEN-AS{asn}-IN rule 20 regex '^{asn}(_[0-9]+)*$'
-            """
-        else:
+        cs.bad_asn_set.add(asn)
+
+    # Prefix limits (cone)
+    prefix_limit = config.get("as-set-limit", {}).get("prefix-limit", 1000)
+    for ipversion in (4, 6):
+        pm = cs.cone_prefix_matrix_map.get((ipversion, asn), [])
+        exceeds = len(pm) > prefix_limit or (ipversion, asn) in cs.cone_prefix_exceeds
+        if exceeds and asn not in large_as_list:
             cs.bad_asn_set.add(asn)
-    else:
-        if len(cone_list) > 0:
-            for i in range(0, len(cone_list), 20):
-                chunk = cone_list[i : i + 20]
-                cmd += f"""
-                set policy as-path-list AUTOGEN-AS{asn}-IN rule {20 + i} action permit
-                set policy as-path-list AUTOGEN-AS{asn}-IN rule {20 + i} regex '^{asn}(_[0-9]+)*_({"|".join(chunk)})$'
-                """
-    return cmd
 
 
-def gen_prefix_list(cs, ipversion, asn, max_length=None, filter_name=None, cone=False):
-    if cone:
-        fn = filter_name or f"AUTOGEN-AS{asn}-CONE"
-    else:
-        fn = filter_name or f"AUTOGEN-AS{asn}"
-    pl = "prefix-list" if ipversion == 4 else "prefix-list6"
-    cmd = f"delete policy {pl} {fn}\n"
-    config = cs.config
-
-    if cone:
-        prefix_matrix = list(cs.cone_prefix_matrix_map.get((ipversion, asn), []))
-    else:
-        prefix_matrix = list(cs.prefix_matrix_map.get((ipversion, asn), []))
-
-    exceeds = len(prefix_matrix) > config["as-set-limit"]["prefix-limit"] or (
-        cone and (ipversion, asn) in cs.cone_prefix_exceeds
-    )
-
-    if exceeds:
-        if asn in config["as-set-limit"]["large-as-list"]:
-            zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
-            le = 24 if ipversion == 4 else 48
-            cmd += f"""
-            set policy {pl} {fn} rule 10 action permit
-            set policy {pl} {fn} rule 10 prefix {zero}
-            set policy {pl} {fn} rule 10 le {le}
-            """
-        else:
-            zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
-            le = 32 if ipversion == 4 else 128
-            cmd += f"""
-            set policy {pl} {fn} rule 10 action deny
-            set policy {pl} {fn} rule 10 prefix {zero}
-            set policy {pl} {fn} rule 10 le {le}
-            """
-            cs.bad_asn_set.add(asn)
-    elif len(prefix_matrix) == 0:
-        zero = "0.0.0.0/0" if ipversion == 4 else "::/0"
-        le = 32 if ipversion == 4 else 128
-        cmd += f"""
-        set policy {pl} {fn} rule 10 action deny
-        set policy {pl} {fn} rule 10 prefix {zero}
-        set policy {pl} {fn} rule 10 le {le}
-        """
-    else:
-        c = 1
-        for prefix in prefix_matrix:
-            network, length, ge, le = prefix[0], prefix[1], prefix[2], prefix[3]
-            le_final = max_length if max_length else le
-            if int(ge) <= int(length) <= int(le_final):
-                cmd += f"""
-                set policy {pl} {fn} rule {c} action permit
-                set policy {pl} {fn} rule {c} prefix {network}/{length}
-                set policy {pl} {fn} rule {c} ge {ge}
-                set policy {pl} {fn} rule {c} le {le_final}
-                """
-            c += 1
-    return cmd
+_NTYPE_LABEL = {
+    "upstream": "Upstream",
+    "peer": "Peer",
+    "downstream": "Downstream",
+    "routeserver": "RouteServer",
+    "ibgp": "IBGP",
+}
 
 
-def gen_as_filter(cs, asn):
-    cmd = gen_as_path(cs, asn)
-    cmd += gen_prefix_list(cs, 4, asn, cone=True)
-    cmd += gen_prefix_list(cs, 6, asn, cone=True)
-    return cmd
+def _prepare_neighbor(cs, neighbor, ntype, vrf):
+    """Populate one neighbor's template-visible state; return its ASN.
 
-
-# ---------------------------------------------------------------------------
-# Policy
-# ---------------------------------------------------------------------------
-
-
-def gen_policy(cs, policy):
-    cmd = ""
-    if "prefix-list" in policy:
-        for p in policy["prefix-list"]:
-            cmd += f"\n    delete policy prefix-list {p['name']}\n"
-            n = 1
-            for r in p["rule"]:
-                cmd += f"""
-                set policy prefix-list {p['name']} rule {n} action {r["action"]}
-                set policy prefix-list {p['name']} rule {n} prefix {r["prefix"]}
-                {f"set policy prefix-list {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
-                {f"set policy prefix-list {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
-                {f"set policy prefix-list {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
-                """
-                n += 1
-    if "prefix-list6" in policy:
-        for p in policy["prefix-list6"]:
-            cmd += f"\n    delete policy prefix-list6 {p['name']}\n"
-            n = 1
-            for r in p["rule"]:
-                cmd += f"""
-                set policy prefix-list6 {p['name']} rule {n} action {r["action"]}
-                set policy prefix-list6 {p['name']} rule {n} prefix {r["prefix"]}
-                {f"set policy prefix-list6 {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
-                {f"set policy prefix-list6 {p['name']} rule {n} ge {r['ge']}" if "ge" in r else ""}
-                {f"set policy prefix-list6 {p['name']} rule {n} le {r['le']}" if "le" in r else ""}
-                """
-                n += 1
-    if "as-path-list" in policy:
-        for p in policy["as-path-list"]:
-            cmd += f"\n    delete policy as-path-list {p['name']}\n"
-            n = 1
-            for r in p["rule"]:
-                cmd += f"""
-                set policy as-path-list {p['name']} rule {n} action {r["action"]}
-                set policy as-path-list {p['name']} rule {n} regex '{r["regex"]}'
-                {f"set policy as-path-list {p['name']} rule {n} description '{r['description']}'" if "description" in r else ""}
-                """
-                n += 1
-    return cmd
-
-
-# ---------------------------------------------------------------------------
-# Redistribute
-# ---------------------------------------------------------------------------
-
-
-def gen_redistribute(cs, redistribute):
-    r_pre_filter = 100
-    r_pre_accept = 1000
-    f = f"""
-    set protocols bgp address-family ipv4-unicast redistribute connected route-map AUTOGEN-Redistribute
-    set protocols bgp address-family ipv4-unicast redistribute static route-map AUTOGEN-Redistribute
-    set protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
-    set protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
-    delete policy route-map AUTOGEN-Redistribute
-    set policy route-map AUTOGEN-Redistribute rule 10 action permit
-    set policy route-map AUTOGEN-Redistribute rule 10 match ip address prefix-list AUTOGEN-LOCAL-ASN-PREFIX4-le32
-    set policy route-map AUTOGEN-Redistribute rule 10 on-match goto {r_pre_accept}
-    set policy route-map AUTOGEN-Redistribute rule 20 action permit
-    set policy route-map AUTOGEN-Redistribute rule 20 match ipv6 address prefix-list AUTOGEN-LOCAL-ASN-PREFIX6-le128
-    set policy route-map AUTOGEN-Redistribute rule 20 on-match goto {r_pre_accept}
-    set policy route-map AUTOGEN-Redistribute rule 999 action deny
-    set policy route-map AUTOGEN-Redistribute rule 1000 action permit
-    set policy route-map AUTOGEN-Redistribute rule 1000 on-match next
-    set policy route-map AUTOGEN-Redistribute rule 10000 action permit
+    Input: cs — the CacheStore (mutated: neighbor_id_hashmap, warnings);
+    neighbor — the neighbor dict (mutated in place); ntype — one of
+    upstream/peer/downstream/routeserver/ibgp; vrf — None for the default
+    context, else {"name", "id", "table"} (recorded as neighbor["_vrf"] so the
+    protocol template binds the session to that VRF + tables).
+    Return: the neighbor's ASN (the local ASN for ibgp).
+    Side effects: normalizes neighbor-address to a list and assigns a unique
+    `nid`; sets `_asn_public`, `_source_address`/`_source_family`, and the manual
+    prefix-list split `_prefix4`/`_prefix6`/`_has_prefix_list`; a private ASN
+    without a prefix-list gets an empty deny-all list + warning. Raises
+    ValueError on an invalid neighbor-address (bare interface name).
     """
-    if "pre-filter" in redistribute:
-        for c in redistribute["pre-filter"]:
-            f += f"""
-            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} action {c["action"]}
-            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} match {c["match"]}
-            set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} on-match goto {r_pre_accept}
-            """
-            if "set" in c:
-                set_list = c["set"] if isinstance(c["set"], list) else [c["set"]]
-                for r_set in set_list:
-                    f += f"""
-                    set policy route-map AUTOGEN-Redistribute rule {r_pre_filter} set {r_set}
-                    """
-            r_pre_filter += 1
-    r_pre_accept += 1
-    if "pre-accept" in redistribute:
-        for c in redistribute["pre-accept"]:
-            f += f"""
-            set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} action {c["action"]}
-            set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} match {c["match"]}
-            """
-            if "set" in c:
-                set_list = c["set"] if isinstance(c["set"], list) else [c["set"]]
-                for r_set in set_list:
-                    f += f"""
-                    set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} set {r_set}
-                    """
-            if c["action"] == "permit" and (
-                "on-match-next" not in c or c["on-match-next"]
-            ):
-                f += f"""
-                set policy route-map AUTOGEN-Redistribute rule {r_pre_accept} on-match next
-                """
-            r_pre_accept += 1
-    return f
-
-
-# ---------------------------------------------------------------------------
-# RPKI
-# ---------------------------------------------------------------------------
-
-
-def gen_rpki(cs, server_list):
-    cmd = "\n    delete protocols rpki\n    "
-    for server in server_list:
-        cmd += f"""set protocols rpki cache {server["server"]} port {server["port"]}
-        set protocols rpki cache {server["server"]} preference {server["preference"]}
-        """
-    return cmd
-
-
-# ---------------------------------------------------------------------------
-# Route-map helpers
-# ---------------------------------------------------------------------------
-
-
-def _pre_accept_filter(route_map_name, r, c):
-    cmd = f"""
-    set policy route-map {route_map_name} rule {r} action {c["action"]}
-    """
-    if "match" in c:
-        cmd += f"""
-        set policy route-map {route_map_name} rule {r} match {c["match"]}
-        """
-    if "set" in c:
-        set_list = c["set"] if isinstance(c["set"], list) else [c["set"]]
-        for r_set in set_list:
-            cmd += f"""
-            set policy route-map {route_map_name} rule {r} set {r_set}
-            """
-    if c["action"] == "permit" and ("on-match-next" not in c or c["on-match-next"]):
-        cmd += f"""
-        set policy route-map {route_map_name} rule {r} on-match next
-        """
-    return cmd
-
-
-def _neighbor_in_optional(cs, neighbor, rmi):
-    f = ""
-    if "local-pref" in neighbor:
-        f += f"""
-        set policy route-map {rmi} rule 100 set local-preference '{neighbor["local-pref"]}'
-        """
-    if "metric" in neighbor:
-        f += f"""
-        set policy route-map {rmi} rule 100 set metric {neighbor["metric"]}
-        """
-    if "in-prepend" in neighbor:
-        f += f"""
-        set policy route-map {rmi} rule 100 set as-path prepend '{neighbor["in-prepend"]}'
-        """
-    if "pre-import-accept" in neighbor:
-        r = 1000
-        for c in neighbor["pre-import-accept"]:
-            f += _pre_accept_filter(rmi, r, c)
-            r += 1
-    return f
-
-
-def _neighbor_out_optional(cs, neighbor, rmo):
-    f = ""
-    if "out-prepend" in neighbor:
-        f += f"""
-        set policy route-map {rmo} rule 100 set as-path prepend '{neighbor["out-prepend"]}'
-        """
-    if "pre-export-accept" in neighbor:
-        r = 1000
-        for c in neighbor["pre-export-accept"]:
-            f += _pre_accept_filter(rmo, r, c)
-            r += 1
-    return f
-
-
-# ---------------------------------------------------------------------------
-# BGP neighbor
-# ---------------------------------------------------------------------------
-
-
-def _bgp_address_family(cs, ipversion, asn, addr, neighbor, ntype, rmi, rmo):
-    la = cs.local_asn
-    maximum_prefix = -1
-    maximum_prefix_out = -1
-    asn_type = validate_asn(asn)
-    if ntype in ["Peer", "Downstream"]:
-        mp = cs.maximum_prefix_map.get(asn, [1, 1])
-        maximum_prefix = mp[0] if ipversion == 4 else mp[1]
-    if ntype in ["Upstream", "RouteServer", "Peer"]:
-        mp = cs.maximum_prefix_map.get(la, [1, 1])
-        maximum_prefix_out = mp[0] if ipversion == 4 else mp[1]
-
-    if "vrf" in neighbor:
-        bgp_neighbor_prefix = f"vrf name {neighbor['vrf']} protocols bgp neighbor"
-    else:
-        bgp_neighbor_prefix = "protocols bgp neighbor"
-
-    return f"""
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast default-originate" if "default-originate" in neighbor and neighbor["default-originate"] else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast addpath-tx-all" if "addpath" in neighbor and neighbor["addpath"] else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-CONE" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
-    {f"delete {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list" if "disable-IRR" in neighbor and neighbor["disable-IRR"] else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast prefix-list import AUTOGEN-AS{asn}-{get_neighbor_id(cs, neighbor)}" if "prefix-list" in neighbor else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast filter-list import AUTOGEN-AS{asn}-IN" if ntype in ["Peer", "Downstream"] and asn_type == 1 else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix {maximum_prefix}" if ntype in ["Peer", "Downstream"] else ""}
-    {f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast maximum-prefix-out {maximum_prefix_out}" if ntype in ["Upstream", "RouteServer", "Peer"] else ""}
-    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast nexthop-self force
-    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map export {rmo}
-    set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast route-map import {rmi}
-    {"" if ("soft-reconfiguration-inbound" in neighbor and not neighbor["soft-reconfiguration-inbound"]) else f"set {bgp_neighbor_prefix} {addr} address-family ipv{ipversion}-unicast soft-reconfiguration inbound"}
-    """
-
-
-def _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id):
-    la = cs.local_asn
-    config = cs.config
-    asn = la if ntype == "IBGP" else neighbor["asn"]
-    multihop = neighbor.get("multihop", False)
-    if not isinstance(multihop, int):
-        multihop = False
-    password = neighbor.get("password")
     addrs = neighbor["neighbor-address"]
     if not isinstance(addrs, list):
         addrs = [addrs]
+    neighbor["neighbor-address"] = addrs
+    neighbor["nid"] = get_neighbor_id(cs, neighbor)
+    if vrf is not None:
+        neighbor["_vrf"] = vrf
 
-    bgp_cmd = ""
+    asn = neighbor["asn"] if ntype != "ibgp" else cs.local_asn
+    neighbor["_asn_public"] = validate_asn(asn) == 1
 
-    # Private ASN without explicit prefix-list => empty deny-all prefix-list
-    if validate_asn(asn) != 1 and "prefix-list" not in neighbor:
+    # Private ASN without an explicit prefix-list => deny-all (parity with FRR
+    # _bgp_neighbor_cmd). Intentional and exercised by the test fixture (AS65500).
+    # Warn so the operator notices the session accepts nothing until a
+    # prefix-list is declared.
+    if not neighbor["_asn_public"] and "prefix-list" not in neighbor:
         neighbor["prefix-list"] = []
+        cs.warnings.append(
+            f"AS{asn} ({ntype}) {addrs}: private ASN without prefix-list "
+            "=> deny-all (declare a prefix-list to accept routes)."
+        )
 
+    # Split a manual per-neighbor prefix-list into v4 / v6 buckets. Entries must
+    # be CIDR prefixes; skip anything that does not parse (e.g. a stray interface
+    # name) with a warning instead of crashing.
     if "prefix-list" in neighbor:
-        nid = get_neighbor_id(cs, neighbor)
-        bgp_cmd += f"""
-        delete policy prefix-list AUTOGEN-AS{asn}-{nid}
-        set policy prefix-list AUTOGEN-AS{asn}-{nid} rule 10000 action deny
-        set policy prefix-list AUTOGEN-AS{asn}-{nid} rule 10000 prefix 0.0.0.0/0
-        set policy prefix-list AUTOGEN-AS{asn}-{nid} rule 10000 ge 0
-        set policy prefix-list AUTOGEN-AS{asn}-{nid} rule 10000 le 32
-        delete policy prefix-list6 AUTOGEN-AS{asn}-{nid}
-        set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule 10000 action deny
-        set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule 10000 prefix ::/0
-        set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule 10000 ge 0
-        set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule 10000 le 128
-        """
-        for plc, ip_str in enumerate(neighbor["prefix-list"], start=1):
-            net = ipaddress.ip_network(ip_str)
-            if net.version == 4:
-                bgp_cmd += f"""
-                set policy prefix-list AUTOGEN-AS{asn}-{nid} rule {plc} action permit
-                set policy prefix-list AUTOGEN-AS{asn}-{nid} rule {plc} prefix {ip_str}
-                """
-            else:
-                bgp_cmd += f"""
-                set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule {plc} action permit
-                set policy prefix-list6 AUTOGEN-AS{asn}-{nid} rule {plc} prefix {ip_str}
-                """
-
-    if "vrf" in neighbor:
-        bgp_neighbor_prefix = f"vrf name {neighbor['vrf']} protocols bgp neighbor"
-        bgp_cmd += f"""
-        delete vrf name {neighbor['vrf']} protocols bgp address-family
-        delete vrf name {neighbor['vrf']} protocols bgp parameters
-        delete vrf name {neighbor['vrf']} protocols bgp system-as
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute connected
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute static
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute connected
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute static
-        set vrf name {neighbor['vrf']} protocols bgp parameters graceful-restart
-        set vrf name {neighbor['vrf']} protocols bgp parameters no-ipv6-auto-ra
-        set vrf name {neighbor['vrf']} protocols bgp parameters router-id {router_id}
-        set vrf name {neighbor['vrf']} protocols bgp system-as {la}
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute connected route-map AUTOGEN-Redistribute
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv4-unicast redistribute static route-map AUTOGEN-Redistribute
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute connected route-map AUTOGEN-Redistribute
-        set vrf name {neighbor['vrf']} protocols bgp address-family ipv6-unicast redistribute static route-map AUTOGEN-Redistribute
-        """
-    else:
-        bgp_neighbor_prefix = "protocols bgp neighbor"
-
-    for addr in addrs:
-        if "default-originate" in neighbor and neighbor["default-originate"]:
-            rmo_adopted = "AUTOGEN-REJECT-ALL"
-        elif ntype == "IBGP" and "simple-out" in neighbor and neighbor["simple-out"]:
-            rmo_adopted = "AUTOGEN-SIMPLE-IBGP-OUT"
-        else:
-            rmo_adopted = rmo
-
-        bgp_cmd += f"""
-        delete {bgp_neighbor_prefix} {addr}
-        {f"set {bgp_neighbor_prefix} {addr} shutdown" if (("shutdown" in neighbor and neighbor["shutdown"]) or (asn in cs.bad_asn_set and asn not in config.get("keepup-as-list", []))) else ""}
-        {f"set {bgp_neighbor_prefix} {addr} passive" if ("passive" in neighbor and neighbor["passive"]) else ""}
-        set {bgp_neighbor_prefix} {addr} description '{neighbor.get("description", f"{ntype[0].upper()}: {cs.as_name_map.get(asn, f'AS{asn}')}")}'
-        set {bgp_neighbor_prefix} {addr} graceful-restart enable
-        {f"set {bgp_neighbor_prefix} {addr} remote-as {asn}" if is_ip(addr) else f"set {bgp_neighbor_prefix} {addr} interface remote-as {asn}"}
-        {f"set {bgp_neighbor_prefix} {addr} password '{password}'" if password else ""}
-        {f"set {bgp_neighbor_prefix} {addr} ebgp-multihop {multihop}" if multihop else ""}
-        set {bgp_neighbor_prefix} {addr} solo
-        set {bgp_neighbor_prefix} {addr} update-source {neighbor["update-source"]}
-        {f"set {bgp_neighbor_prefix} {addr} interface source-interface {neighbor['update-source']}" if is_ip(addr) and not is_ip(neighbor["update-source"]) and not multihop else ""}
-        {f"set {bgp_neighbor_prefix} {addr} timers holdtime {neighbor['holdtime']}" if "holdtime" in neighbor else ""}
-        {f"set {bgp_neighbor_prefix} {addr} timers keepalive {neighbor['keepalive']}" if "keepalive" in neighbor else ""}
-        {f"set {bgp_neighbor_prefix} {addr} capability extended-nexthop" if "extended-nexthop" in neighbor and neighbor["extended-nexthop"] else ""}
-        {f"set {bgp_neighbor_prefix} {addr} local-as {neighbor['local-asn']} no-prepend replace-as" if "local-asn" in neighbor else ""}
-        """
-
-        if "address-family" in neighbor:
-            if (
-                "ipv4" in neighbor["address-family"]
-                and neighbor["address-family"]["ipv4"]
-            ):
-                bgp_cmd += _bgp_address_family(
-                    cs, 4, asn, addr, neighbor, ntype, rmi, rmo_adopted
+        p4, p6 = [], []
+        for ip_str in neighbor["prefix-list"]:
+            try:
+                net = ipaddress.ip_network(ip_str)
+            except ValueError:
+                cs.warnings.append(
+                    f"AS{asn} ({ntype}) {addrs}: ignoring invalid "
+                    f"prefix-list entry '{ip_str}' (not a CIDR prefix)."
                 )
-            if (
-                "ipv6" in neighbor["address-family"]
-                and neighbor["address-family"]["ipv6"]
-            ):
-                bgp_cmd += _bgp_address_family(
-                    cs, 6, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                )
-        else:
-            if is_ip(addr) and not (
-                "extended-nexthop" in neighbor and neighbor["extended-nexthop"]
-            ):
-                iv = ipaddress.ip_address(addr).version
-                bgp_cmd += _bgp_address_family(
-                    cs, iv, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                )
-            else:
-                bgp_cmd += _bgp_address_family(
-                    cs, 4, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                )
-                bgp_cmd += _bgp_address_family(
-                    cs, 6, asn, addr, neighbor, ntype, rmi, rmo_adopted
-                )
-    return bgp_cmd
-
-
-def gen_bgp_neighbor(cs, ntype, neighbor, router_id):
-    """Generate full config for a single BGP neighbor (route-maps + session)."""
-    la = cs.local_asn
-    nid = get_neighbor_id(cs, neighbor)
-    asn = la if ntype == "IBGP" else neighbor["asn"]
-    asn_type = validate_asn(asn)
-
-    if asn_type != 1 and ntype != "Downstream":
-        raise ValueError(f"Private ASN {asn} must be Downstream")
-
-    if ntype == "IBGP":
-        rmi = f"AUTOGEN-IBGP-IN-{nid}"
-        rmo = f"AUTOGEN-IBGP-OUT-{nid}"
-    else:
-        rmi = f"AUTOGEN-AS{asn}-{ntype.upper()}-IN-{nid}"
-        rmo = f"AUTOGEN-AS{asn}-{ntype.upper()}-OUT-{nid}"
-
-    # IN route-map
-    ff = f"""
-    delete policy route-map {rmi}
-    set policy route-map {rmi} rule 10 action permit
-    {"" if ("no-in-filter" in neighbor) else (f"set policy route-map {rmi} rule 10 call AUTOGEN-{ntype.upper()}-IN" if asn_type == 1 else f"set policy route-map {rmi} rule 10 set as-path exclude all")}
-    set policy route-map {rmi} rule 10 on-match next
-    set policy route-map {rmi} rule 100 action permit
-    set policy route-map {rmi} rule 100 on-match next
-    set policy route-map {rmi} rule 200 action permit
-    {f"set policy route-map {rmi} rule 200 set large-community add {la}:10000:{asn}" if ntype != "IBGP" else ""}
-    set policy route-map {rmi} rule 200 set large-community add {la}:10001:{nid}
-    set policy route-map {rmi} rule 200 on-match next
-    set policy route-map {rmi} rule 10000 action permit
-    """
-
-    # OUT route-map
-    ff += f"""
-    delete policy route-map {rmo}
-    set policy route-map {rmo} rule 10 action permit
-    set policy route-map {rmo} rule 10 call AUTOGEN-{ntype.upper()}-OUT
-    set policy route-map {rmo} rule 10 on-match next
-    set policy route-map {rmo} rule 100 action permit
-    set policy route-map {rmo} rule 100 on-match next
-    """
-    if asn_type == 1:
-        ff += f"""
-    set policy route-map {rmo} rule 200 action deny
-    set policy route-map {rmo} rule 200 match large-community large-community-list AUTOGEN-DNA-ANY
-    set policy route-map {rmo} rule 201 action deny
-    set policy route-map {rmo} rule 201 match large-community large-community-list AUTOGEN-DNA-AS{asn}
-    set policy route-map {rmo} rule 202 action deny
-    set policy route-map {rmo} rule 202 match large-community large-community-list AUTOGEN-DNA-NID{nid}
-    set policy route-map {rmo} rule 300 action permit
-    set policy route-map {rmo} rule 300 match large-community large-community-list AUTOGEN-OLA-AS{asn}
-    set policy route-map {rmo} rule 300 on-match goto 401
-    set policy route-map {rmo} rule 301 action permit
-    set policy route-map {rmo} rule 301 match large-community large-community-list AUTOGEN-OLA-NID{nid}
-    set policy route-map {rmo} rule 301 on-match goto 401
-    set policy route-map {rmo} rule 302 action deny
-    set policy route-map {rmo} rule 302 match large-community large-community-list AUTOGEN-OLA-ALL
-    set policy route-map {rmo} rule 401 action permit
-    set policy route-map {rmo} rule 401 match large-community large-community-list AUTOGEN-Prepend-1X-AS{asn}
-    set policy route-map {rmo} rule 401 set as-path prepend '{la}'
-    set policy route-map {rmo} rule 401 on-match next
-    set policy route-map {rmo} rule 402 action permit
-    set policy route-map {rmo} rule 402 match large-community large-community-list AUTOGEN-Prepend-2X-AS{asn}
-    set policy route-map {rmo} rule 402 set as-path prepend '{la} {la}'
-    set policy route-map {rmo} rule 402 on-match next
-    """
-    ff += f"""
-    set policy route-map {rmo} rule 10000 action permit
-    """
-
-    # NID community lists
-    if asn_type == 1:
-        ff += f"""
-    delete policy large-community-list AUTOGEN-DNA-NID{nid}
-    set policy large-community-list AUTOGEN-DNA-NID{nid} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-DNA-NID{nid} rule 10 regex "{la}:1001:{nid}"
-    delete policy large-community-list AUTOGEN-OLA-NID{nid}
-    set policy large-community-list AUTOGEN-OLA-NID{nid} rule 10 action 'permit'
-    set policy large-community-list AUTOGEN-OLA-NID{nid} rule 10 regex "{la}:1101:{nid}"
-    """
-
-    ff += _neighbor_in_optional(cs, neighbor, rmi)
-    ff += _neighbor_out_optional(cs, neighbor, rmo)
-    ff += _bgp_neighbor_cmd(cs, neighbor, ntype, rmi, rmo, router_id)
-    return ff
-
-
-# ---------------------------------------------------------------------------
-# BGP protocol
-# ---------------------------------------------------------------------------
-
-
-def gen_bgp(cs, bgp_config, router_id):
-    la = cs.local_asn
-    cmd = f"""
-    delete protocols bgp address-family
-    delete protocols bgp parameters
-    delete protocols bgp system-as
-    set protocols bgp address-family ipv4-unicast redistribute connected
-    set protocols bgp address-family ipv4-unicast redistribute static
-    set protocols bgp address-family ipv6-unicast redistribute connected
-    set protocols bgp address-family ipv6-unicast redistribute static
-    set protocols bgp parameters graceful-restart
-    set protocols bgp parameters no-ipv6-auto-ra
-    set protocols bgp parameters router-id {router_id}
-    set protocols bgp system-as {la}
-    """
-    for ntype, label in [
-        ("ibgp", "IBGP"),
-        ("upstream", "Upstream"),
-        ("routeserver", "RouteServer"),
-        ("peer", "Peer"),
-        ("downstream", "Downstream"),
-    ]:
-        for n in bgp_config.get(ntype, []):
-            if "manual" in n and n["manual"]:
                 continue
-            cmd += gen_bgp_neighbor(cs, label, n, router_id)
-    if "parameters" in bgp_config:
-        for param in bgp_config["parameters"]:
-            cmd += f"\n    set protocols bgp parameters {param}\n"
-    return cmd
+            (p4 if net.version == 4 else p6).append(ip_str)
+        neighbor["_prefix4"] = p4
+        neighbor["_prefix6"] = p6
+        neighbor["_has_prefix_list"] = True
 
-
-# ---------------------------------------------------------------------------
-# System FRR / Kernel / BMP / sFlow / SNMP
-# ---------------------------------------------------------------------------
-
-
-def gen_system_frr(cs):
-    """System FRR configuration placeholder."""
-    return """
-    """
-
-
-def gen_kernel(cs, kernel_config):
-    cmd = ""
-    for ipv, af in [("ipv4", "ip"), ("ipv6", "ipv6")]:
-        if ipv in kernel_config:
-            for rm in kernel_config[ipv]:
-                proto = rm["protocol"]
-                pfx = "IPv4" if ipv == "ipv4" else "IPv6"
-                cmd += f"""
-                delete policy route-map AUTOGEN-KERNEL-{pfx}-{proto}
-                set policy route-map AUTOGEN-KERNEL-{pfx}-{proto} rule 100 action permit
-                delete system {af} protocol {proto}
-                set system {af} protocol {proto} route-map AUTOGEN-KERNEL-{pfx}-{proto}
-                """
-                if "src" in rm:
-                    pl_name = f"AUTOGEN-{pfx}-ALL"
-                    match_kw = "ip" if ipv == "ipv4" else "ipv6"
-                    cmd += f"""
-                    set policy route-map AUTOGEN-KERNEL-{pfx}-{proto} rule 1 action permit
-                    set policy route-map AUTOGEN-KERNEL-{pfx}-{proto} rule 1 match {match_kw} address prefix-list '{pl_name}'
-                    set policy route-map AUTOGEN-KERNEL-{pfx}-{proto} rule 1 set src '{rm["src"]}'
-                    set policy route-map AUTOGEN-KERNEL-{pfx}-{proto} rule 1 on-match next
-                    """
-                if "pre-accept" in rm:
-                    r = 10
-                    for c in rm["pre-accept"]:
-                        cmd += _pre_accept_filter(f"AUTOGEN-KERNEL-{pfx}-{proto}", r, c)
-                        r += 1
-    return cmd
-
-
-def gen_bmp(cs, bmp_config):
-    cmd = """
-    delete system frr bmp
-    set system frr bmp
-    delete protocols bgp bmp
-    """
-    for s in bmp_config:
-        cmd += f"""
-        set protocols bgp bmp target {s["target"]} address {s["address"]}
-        set protocols bgp bmp target {s["target"]} port {s["port"]}
-        """
-        if "mirror" in s and not s["mirror"]:
-            cmd += f"""
-            set protocols bgp bmp target {s["target"]} monitor ipv4-unicast post-policy
-            set protocols bgp bmp target {s["target"]} monitor ipv6-unicast post-policy
-            """
+    # source-address: BIRD `source address` requires an IP literal, and its
+    # family must match the channel it is emitted on. Record the family so the
+    # template only emits it on the matching channel. (Unnumbered peering is
+    # expressed via the neighbor address itself as a link-local %iface, so there
+    # is no separate interface field.)
+    src = neighbor.get("source-address")
+    if src:
+        if is_ip(src):
+            neighbor["_source_address"] = src
+            neighbor["_source_family"] = ipaddress.ip_address(src).version
         else:
-            cmd += f"""
-            set protocols bgp bmp target {s["target"]} mirror
-            """
-    return cmd
+            cs.warnings.append(
+                f"AS{asn} ({ntype}) {addrs}: source-address '{src}' is "
+                "not an IP; ignored."
+            )
+
+    # A neighbor address must be a plain IP or a BIRD unnumbered link-local
+    # "%iface" form. A bare interface name (e.g. "wg-test") is a config error —
+    # fail loudly rather than silently skip.
+    bad = [a for a in addrs if not is_ip(a) and not is_unnumbered(a)]
+    if bad:
+        raise ValueError(
+            f"AS{asn} ({ntype}): invalid neighbor-address {bad} — "
+            "must be an IP or link-local '%iface' (e.g. fe80::1%wg)."
+        )
+    return asn
+
+
+def _routing_contexts(router_config):
+    """Yield (vrf, bgp) for the default context plus each named VRF.
+
+    vrf is None for the default context (master tables / main kernel table),
+    else {"name", "id", "table"} — `name` is the raw VRF / OS device name used
+    in `vrf "<name>";`, `id` is a sanitized identifier used in table / protocol
+    names (`vrf_<id>_v4` etc.), `table` is the Linux routing-table id. `bgp` is
+    that context's protocols.bgp dict.
+    """
+    yield None, router_config.get("protocols", {}).get("bgp", {})
+    for vrf_name, vrf_cfg in (router_config.get("vrf") or {}).items():
+        vrf = {
+            "name": vrf_name,
+            "id": str(vrf_name).lower().replace("-", "_"),
+            "table": vrf_cfg["table"],
+        }
+        yield vrf, (vrf_cfg.get("protocols", {}) or {}).get("bgp", {})
+
+
+def _prepare_for_bird(cs, router_config):
+    """Populate the template-visible state the BIRD templates rely on.
+
+    Input: cs — the CacheStore (read for pdb/bgpq4/as-set data; mutated:
+    neighbor_id_hashmap, bad_asn_set, warnings); router_config — one router's
+    config dict (mutated in place).
+    No return value. Runs before any template renders and produces the side
+    effects the old FRR generator emitted inline:
+      - processes every neighbor across the default context AND each VRF
+        (see _routing_contexts / _prepare_neighbor): nid, flags, prefix split;
+        VRF neighbors are tagged `_vrf`
+      - builds router_config["_render_neighbors"], a flat ordered list of
+        (ntype_label, neighbor) the templates iterate for filters + protocols
+      - runs bad-ASN detection over peer/downstream public ASNs (all contexts)
+      - writes router_config["local_asn_prefix4"/"6"] for policy.bird.j2
+      - expands blacklist as-sets into config["blacklist"]["_expanded_asn"]
+    """
+    config = cs.config
+
+    # 1. Per-neighbor prep, flattened across the default context + every VRF, in
+    #    render order. The VRF block mirrors the default `protocols`, so the same
+    #    per-neighbor prep applies; only the protocol binding differs (_vrf).
+    render_neighbors = []
+    peer_downstream_asns = set()
+    for vrf, bgp in _routing_contexts(router_config):
+        for ntype in ["upstream", "peer", "downstream", "routeserver", "ibgp"]:
+            for neighbor in bgp.get(ntype, []):
+                asn = _prepare_neighbor(cs, neighbor, ntype, vrf)
+                if ntype in ("peer", "downstream"):
+                    peer_downstream_asns.add(asn)
+                render_neighbors.append((_NTYPE_LABEL[ntype], neighbor))
+    router_config["_render_neighbors"] = render_neighbors
+
+    # 2. Bad-ASN detection (Tier1/AS0/limit) for peer+downstream public ASNs
+    for asn in sorted(peer_downstream_asns):
+        if validate_asn(asn) == 1:
+            _detect_bad_asn(cs, asn)
+
+    # 3. Local-ASN prefix sets (le32 / le128) consumed by policy.bird.j2
+    router_config["local_asn_prefix4"] = _local_asn_prefixes(cs, 4)
+    router_config["local_asn_prefix6"] = _local_asn_prefixes(cs, 6)
+
+    # 4. Blacklist as-set expansion merged into a flat ASN list
+    if "blacklist" in config:
+        bl = config["blacklist"]
+        expanded = list(bl.get("asn", []))
+        for asset_name in bl.get("as-set", []):
+            expanded += cs.blacklist_asset_members.get(asset_name, [])
+        # de-dup, keep ints
+        bl["_expanded_asn"] = sorted({int(x) for x in expanded})
+
+
+# ---------------------------------------------------------------------------
+# Template-based Generators
+# ---------------------------------------------------------------------------
 
 
 def gen_sflow(cs, sflow_config):
-    cmd = f"""
-    delete system frr snmp
-    set system frr snmp bgpd
-    set system frr snmp isisd
-    set system frr snmp ldpd
-    set system frr snmp ospf6d
-    set system frr snmp ospfd
-    set system frr snmp ripd
-    set system frr snmp zebra
-    delete system sflow
-    set system sflow agent-address {sflow_config["agent-address"]}
+    """Render the VyOS sflow `set ...` commands.
+
+    Input: cs — CacheStore (unused, kept for signature symmetry);
+    sflow_config — the router's service.sflow dict.
+    Return: the rendered sflow.j2 text (a block of VyOS set commands).
     """
-    for sv in sflow_config["server"]:
-        cmd += f"\n    set system sflow server {sv['address']} port {sv['port']}\n"
-    for iface in sflow_config["interface"]:
-        cmd += f"\n    set system sflow interface {iface}\n"
-    if "vpp-interface" in sflow_config:
-        cmd += "\n    set system sflow vpp\n"
-        for iface in sflow_config["vpp-interface"]:
-            cmd += f"\n    set vpp sflow interface {iface}\n"
-            cmd += f"\n    set system sflow interface {iface}\n"
-    return cmd
+    template = env.get_template('sflow.j2')
+    return template.render(sflow=sflow_config)
 
 
 def gen_snmp(cs, snmp_config, engineid):
-    return f"""
-    delete service snmp
-    set service snmp listen-address {snmp_config["listen-address"]}
-    set service snmp location '{snmp_config["location"]}'
-    set service snmp v3 engineid {engineid}
-    set service snmp v3 group default mode ro
-    set service snmp v3 group default view default
-    set service snmp v3 user vyos auth encrypted-password {snmp_config["encrypted-password"]}
-    set service snmp v3 user vyos auth type sha
-    set service snmp v3 user vyos group default
-    set service snmp v3 user vyos privacy encrypted-password {snmp_config["encrypted-password"]}
-    set service snmp v3 user vyos privacy type aes
-    set service snmp v3 view default oid 1
-    """
+    """Render the VyOS SNMP `set ...` commands.
 
+    Input: cs — CacheStore (unused); snmp_config — the router's service.snmp
+    dict; engineid — the SNMP v3 engine-ID string (see ipv4_to_engineid).
+    Return: the rendered snmp.j2 text.
+    """
+    template = env.get_template('snmp.j2')
+    return template.render(snmp=snmp_config, engineid=engineid)
+
+
+def gen_container_bird(cs, router_config):
+    """Render the VyOS commands that set up the BIRD container on the host.
+
+    Input: cs — CacheStore; router_config — one router's config dict.
+    Return: the rendered container.j2 text (VyOS `set container ...` commands).
+    """
+    template = env.get_template('container.j2')
+    return template.render(
+        cs=cs,
+        router_config=router_config
+    )
+
+def gen_bird_config(cs, router_config, router_id=None):
+    """Generate the complete bird.conf for one router.
+
+    Input: cs — CacheStore (preloaded with pdb/bgpq4/as-set data); router_config
+    — one router's config dict; router_id — optional override, else taken from
+    router_config["router-id"].
+    Return: the full bird.conf text. Runs _prepare_for_bird() first (which
+    mutates cs and router_config), then renders header.bird.j2 (which includes
+    all the other bird templates).
+    """
+    _prepare_for_bird(cs, router_config)
+    template = bird_env.get_template('header.bird.j2')
+    return template.render(
+        cs=cs,
+        router_config=router_config,
+        router_id=router_id or router_config.get("router-id"),
+        local_asn=cs.local_asn,
+        rpki_servers=router_config.get("protocols", {}).get("rpki", []),
+    )
 
 # ---------------------------------------------------------------------------
 # Full script assembly
 # ---------------------------------------------------------------------------
 
 
-async def generate_router_script(cs, router_config):
-    """Generate the complete VyOS configure script for a single router."""
-    la = cs.local_asn
-    config = cs.config
+async def generate_router_script(cs, router_config, worker_base_url=""):
+    """Generate the VyOS host setup script for one router.
 
+    Input: cs — CacheStore; router_config — one router's config dict;
+    worker_base_url — the worker base URL embedded in the script (used by the
+    container to fetch its bird.conf).
+    Return: the full VyOS `configure.sh` text. This is the host-side script
+    (sflow + snmp + BIRD container setup); it does NOT contain bird.conf —
+    that is served separately via gen_bird_config.
+
+    Resolves router-id via DNS-over-HTTPS (resolve_router_id) when the config
+    omits "router-id", so this is async and may perform network I/O.
+    """
     router_name = router_config["name"]
     router_id = router_config.get("router-id") or await resolve_router_id(router_name)
 
-    configure = ""
-
-    # Collect connected ASNs
-    upstream_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["upstream"]]
-    routeserver_asns = [
-        n["asn"] for n in router_config["protocols"]["bgp"]["routeserver"]
-    ]
-    peer_asns = [n["asn"] for n in router_config["protocols"]["bgp"]["peer"]]
-    downstream_asns = [
-        n["asn"] for n in router_config["protocols"]["bgp"]["downstream"]
-    ]
-    connected_asns = sorted(
-        set(upstream_asns + routeserver_asns + peer_asns + downstream_asns)
-    )
-
-    # Blacklist
-    if "blacklist" in config:
-        configure += gen_blacklist_filter(cs, config["blacklist"])
-
-    # Community lists
-    configure += gen_as_community(cs, la)
-    for asn in connected_asns:
-        if validate_asn(asn) == 1:
-            configure += gen_as_community(cs, asn)
-
-    # Local ASN prefix lists
-    configure += gen_prefix_list(cs, 4, la, filter_name="AUTOGEN-LOCAL-ASN-PREFIX4")
-    configure += gen_prefix_list(cs, 6, la, filter_name="AUTOGEN-LOCAL-ASN-PREFIX6")
-    configure += gen_prefix_list(
-        cs, 4, la, max_length=32, filter_name="AUTOGEN-LOCAL-ASN-PREFIX4-le32"
-    )
-    configure += gen_prefix_list(
-        cs, 6, la, max_length=128, filter_name="AUTOGEN-LOCAL-ASN-PREFIX6-le128"
-    )
-
-    # Peer/downstream AS filters
-    for asn in sorted(set(peer_asns + downstream_asns)):
-        if validate_asn(asn) == 1:
-            configure += gen_as_filter(cs, asn)
-
-    # RPKI
-    configure += gen_rpki(cs, router_config["protocols"]["rpki"])
-
-    # Policy
-    if "policy" in router_config:
-        configure += gen_policy(cs, router_config["policy"])
-
-    # BGP
-    configure += gen_bgp(cs, router_config["protocols"]["bgp"], router_id)
-
-    # Redistribute
-    if "redistribute" in router_config:
-        configure += gen_redistribute(cs, router_config["redistribute"])
-    else:
-        configure += gen_redistribute(cs, {})
-
-    # System FRR
-    configure += gen_system_frr(cs)
+    configure_body = ""
 
     # Services
+    # NOTE: BMP is NOT configured here — it is an FRR feature. Under BIRD the
+    # BMP protocols are rendered directly into bird.conf (header.bird.j2).
     if "service" in router_config:
-        if "bmp" in router_config["service"]:
-            configure += gen_bmp(cs, router_config["service"]["bmp"])
         if "sflow" in router_config["service"]:
-            configure += gen_sflow(cs, router_config["service"]["sflow"])
+            configure_body += gen_sflow(cs, router_config["service"]["sflow"])
         if "snmp" in router_config["service"]:
-            configure += gen_snmp(
+            configure_body += gen_snmp(
                 cs, router_config["service"]["snmp"], ipv4_to_engineid(router_id)
             )
 
-    # Kernel
-    if "kernel" in router_config:
-        configure += gen_kernel(cs, router_config["kernel"])
+    # BIRD3 Container Setup
+    configure_body += gen_container_bird(cs, router_config)
 
-    # Clean up whitespace
-    configure = "\n".join(
-        line.strip() for line in configure.splitlines() if line.strip()
+    # Render final script wrapper
+    wrapper_template = env.get_template('configure.sh.j2')
+    return wrapper_template.render(
+        cs=cs,
+        router_config=router_config,
+        router_id=router_id,
+        configure_body=configure_body,
+        worker_base_url=worker_base_url
     )
-
-    # Assemble final script
-    configure = (
-        "\necho 'start configure'\n"
-        + "\nconfigure\n"
-        + cs.defaultconfig
-        + configure
-        + (
-            router_config["custom-config"] + "\n"
-            if "custom-config" in router_config
-            else ""
-        )
-        + "\necho 'configure done'\n"
-        + '\nvtysh -c "watchfrr ignore bgpd"\n'
-        + "\ncommit\n"
-        + "\nexit\n"
-    )
-
-    script_start = r"""#!/bin/vbash
-
-if [ "$(id -g -n)" != 'vyattacfg' ] ; then
-    exec sg vyattacfg -c "/bin/vbash $(readlink -f $0) $@"
-fi
-
-source /opt/vyatta/etc/functions/script-template
-"""
-    script_env = f"""
-ASN={la}
-ROUTER={router_name}
-    """
-    script_end = r"""exit"""
-    return script_start + script_env + configure + script_end
