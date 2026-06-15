@@ -135,19 +135,27 @@ function autogen_apply_prepend_to_as(int asn) {
 # and dropped). This gate is mandatory and always runs, so a blackhole still
 # cannot leak the wrong way (e.g. an upstream-learned route re-advertised to
 # another upstream).
+#
+# "Own" routes include RTS_INHERIT: prefixes the kernel protocol `learn`s from
+# the host FIB (VyOS static blackholes / aggregates). The kernel/direct import
+# filter already restricts those to autogen_local_asn_prefix, so treating them
+# as own-origin here is what actually gets the local aggregate advertised
+# (FRR's old `redistribute static`).
 
 function autogen_peer_out() -> bool {
   if source ~ [
     RTS_STATIC,
     RTS_DEVICE,
-    RTS_BGP
+    RTS_BGP,
+    RTS_INHERIT
   ] then {
     # Deny IBGP routes
     if (large_community_from_ibgp ~ bgp_large_community) then return false;
 
     if (source ~ [
       RTS_STATIC,
-      RTS_DEVICE
+      RTS_DEVICE,
+      RTS_INHERIT
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
@@ -161,14 +169,16 @@ function autogen_upstream_out() -> bool {
   if source ~ [
     RTS_STATIC,
     RTS_DEVICE,
-    RTS_BGP
+    RTS_BGP,
+    RTS_INHERIT
   ] then {
     # Deny IBGP routes
     if (large_community_from_ibgp ~ bgp_large_community) then return false;
 
     if (source ~ [
       RTS_STATIC,
-      RTS_DEVICE
+      RTS_DEVICE,
+      RTS_INHERIT
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
@@ -182,11 +192,13 @@ function autogen_downstream_out() -> bool {
   if source ~ [
     RTS_STATIC,
     RTS_DEVICE,
-    RTS_BGP
+    RTS_BGP,
+    RTS_INHERIT
   ] then {
     if (source ~ [
       RTS_STATIC,
-      RTS_DEVICE
+      RTS_DEVICE,
+      RTS_INHERIT
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_ibgp ~ bgp_large_community) ||
@@ -205,14 +217,16 @@ function autogen_routeserver_out() -> bool {
   if source ~ [
     RTS_STATIC,
     RTS_DEVICE,
-    RTS_BGP
+    RTS_BGP,
+    RTS_INHERIT
   ] then {
     # Deny IBGP routes
     if (large_community_from_ibgp ~ bgp_large_community) then return false;
 
     if (source ~ [
       RTS_STATIC,
-      RTS_DEVICE
+      RTS_DEVICE,
+      RTS_INHERIT
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
