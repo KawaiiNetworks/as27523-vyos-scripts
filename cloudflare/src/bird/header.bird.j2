@@ -113,13 +113,13 @@ protocol kernel {
 protocol static {
   ipv4;
   # Example: route 1.2.3.0/24 reject;
-  route 0.0.0.0/0 reject { preference = 0; };
+  route 0.0.0.0/0 unreachable { preference = 0; };
 }
 
 protocol static {
   ipv6;
   # Example: route 2001:db8::/48 reject;
-  route ::/0 reject { preference = 0; };
+  route ::/0 unreachable { preference = 0; };
 }
 
 # BMP Configuration

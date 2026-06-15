@@ -72,14 +72,28 @@ echo 'configure done'
 
 commit
 
-# Download the generated BIRD config to a temp file in the SAME dir, then swap
-# it in atomically (mv = rename). A failed/partial download must never clobber
-# the working bird.conf — only reload BIRD when the new config is actually in.
+# Download the generated BIRD config to a temp file in the SAME dir, syntax-check
+# it, then swap it in atomically (mv = rename). A failed download OR a config
+# that does not parse must never clobber the working bird.conf — we only reload
+# BIRD once the new config is downloaded AND validated.
 mkdir -p /config/myapp/bird
 TMP_BIRD_CONF=$(mktemp /config/myapp/bird/.bird.conf.XXXXXX)
 if curl -sSfL -o "$TMP_BIRD_CONF" "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"; then
-    mv "$TMP_BIRD_CONF" /config/myapp/bird/bird.conf
-    sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
+    # /config/myapp/bird is mounted into the container at /etc/bird, so the temp
+    # file is reachable there. `bird -p` is parse-only (does not touch the daemon).
+    NEW_IN_CTR="/etc/bird/$(basename "$TMP_BIRD_CONF")"
+    if ! sudo podman exec bird true 2>/dev/null; then
+        # Container not up yet (first provision — it has no config to start with).
+        # Can't pre-validate; place the config so BIRD can come up on next start.
+        mv "$TMP_BIRD_CONF" /config/myapp/bird/bird.conf
+    elif sudo podman exec bird bird -p -c "$NEW_IN_CTR"; then
+        # Running and parses cleanly: swap in atomically and reload.
+        mv "$TMP_BIRD_CONF" /config/myapp/bird/bird.conf
+        sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
+    else
+        echo "new bird.conf failed 'bird -p' syntax check; keeping the existing config" >&2
+        rm -f "$TMP_BIRD_CONF"
+    fi
 else
     echo "bird.conf download failed; keeping the existing config" >&2
     rm -f "$TMP_BIRD_CONF"

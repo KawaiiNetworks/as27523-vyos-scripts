@@ -4,7 +4,8 @@
 {% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
 {% set nid = neighbor.nid %}
 {% set tletter = {'Upstream': 'u', 'Peer': 'p', 'Downstream': 'd', 'RouteServer': 'r', 'IBGP': 'i'}[ntype] %}
-{% set filter_prefix = "filter_" ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
+{% set vrf_pfx = ('vrf_' ~ neighbor['_vrf'].id ~ '_') if neighbor.get('_vrf') else '' %}
+{% set filter_prefix = "filter_" ~ vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
 {# IRR cone check applies to public Peer/Downstream without a manual prefix-list. #}
 {% set irr_cone = ntype in ['Peer', 'Downstream'] and neighbor['_asn_public'] and 'disable-IRR' not in neighbor and not neighbor.get('_has_prefix_list') %}
 {# One skeleton for every _in filter — only the contents vary, so the Jinja
@@ -163,8 +164,9 @@ filter {{ filter_prefix }}_out {
 {% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
 {% set nid = neighbor.nid %}
 {% set tletter = {'Upstream': 'u', 'Peer': 'p', 'Downstream': 'd', 'RouteServer': 'r', 'IBGP': 'i'}[ntype] %}
-{% set proto_base = tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
-{% set filter_prefix = "filter_" ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
+{% set vrf_pfx = ('vrf_' ~ neighbor['_vrf'].id ~ '_') if neighbor.get('_vrf') else '' %}
+{% set proto_base = vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
+{% set filter_prefix = "filter_" ~ vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
 {% set is_shutdown = (neighbor.shutdown or (asn in cs.bad_asn_set and asn not in cs.config.get('keepup-as-list', []))) %}
 {% set mp_in = cs.maximum_prefix_map.get(asn, [1, 1]) %}
 {% set mp_out = cs.maximum_prefix_map.get(cs.local_asn, [1, 1]) %}
