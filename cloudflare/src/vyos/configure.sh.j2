@@ -49,6 +49,6 @@ commit
 mkdir -p /config/myapp/bird
 curl -sSfLo /config/myapp/bird/bird.conf "{{ worker_base_url }}/router/bird.{{ router_config.name }}.conf"
 
-sudo podman exec bird birdcl configure || true
+sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
 exit
 

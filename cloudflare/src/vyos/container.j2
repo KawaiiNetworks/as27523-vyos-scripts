@@ -7,9 +7,11 @@ set container name bird allow-host-networks
 set container name bird capability 'net-admin'
 set container name bird restart 'always'
 
+{# The image's ENTRYPOINT is `bird`; `command` supplies its arguments. `-s`
+   puts the control socket next to the config in the mounted /etc/bird dir;
+   birdcl (in configure.sh) connects to the same path. #}
+set container name bird command '-c /etc/bird/bird.conf -s /etc/bird/bird.ctl -d'
+
 {# Volume mounting: Map the host config directory to the container #}
 set container name bird volume conf destination '/etc/bird'
 set container name bird volume conf source '/config/myapp/bird'
-
-{# Optional: Environment variables or custom arguments #}
-{# BIRD usually looks for /etc/bird/bird.conf by default #}

@@ -31,8 +31,8 @@ _UA = {"User-Agent": "VyOS-Config-Worker"}
 # provider unreachable from the serving colo) makes `await fetch` hang forever
 # and the CF runtime kills the whole request as "hung". A timeout turns that
 # into a normal exception we can fail over from / surface as a 500.
-_HTTP_TIMEOUT_MS = 8000
-_DOH_TIMEOUT_MS = 5000
+_HTTP_TIMEOUT_MS = 3000
+_DOH_TIMEOUT_MS = 3000
 
 _DOH_PROVIDERS = [
     (
