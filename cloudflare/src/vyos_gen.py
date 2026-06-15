@@ -1,5 +1,5 @@
 """
-VyOS + BIRD3 configuration generation.
+VyOS + BIRD configuration generation.
 Uses Jinja2 templates for command/config generation.
 """
 
@@ -431,7 +431,7 @@ async def generate_router_script(cs, router_config, worker_base_url=""):
                 cs, router_config["service"]["snmp"], ipv4_to_engineid(router_id)
             )
 
-    # BIRD3 Container Setup
+    # BIRD Container Setup
     configure_body += gen_container_bird(cs, router_config)
 
     # Render final script wrapper

@@ -9,7 +9,7 @@ source /opt/vyatta/etc/functions/script-template
 ASN=27523
 ROUTER=core.test.example
 
-echo 'start configure (bird3)'
+echo 'start configure'
 
 configure
 

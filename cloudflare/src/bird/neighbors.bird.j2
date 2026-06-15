@@ -1,6 +1,5 @@
 # neighbors.bird.j2
 # Per-session BGP inbound/outbound filters and protocol instances.
-
 {% macro render_neighbor_filters(ntype, neighbor) %}
 {% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
 {% set nid = neighbor.nid %}
@@ -269,7 +268,6 @@ protocol bgp {{ proto_name }} {
 }
 {% endfor %}
 {% endmacro %}
-
 # Rendering Session Filters
 {# _render_neighbors is the flat (ntype, neighbor) list built by _prepare_for_bird,
    covering the default context AND every VRF, in render order. #}

@@ -10,7 +10,7 @@ on:
         description: "Which BIRD image to build"
         type: choice
         required: true
-        default: bird3
+        default: bird2
         options:
           - bird2
           - bird3

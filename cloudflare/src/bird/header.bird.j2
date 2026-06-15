@@ -1,4 +1,4 @@
-# BIRD3 Configuration - Header Section
+# BIRD Configuration - Header Section
 # Generated for AS{{ local_asn }}
 # Router ID: {{ router_id }}
 
@@ -25,15 +25,14 @@ define local_asn = {{ cs.local_asn }};
 
 # Per-AS filtering data and per-neighbor filters / protocols
 {% include "as_filters.bird.j2" %}
+
 # VRF tables/protocols — BEFORE neighbors so VRF BGP channels can reference the tables
 {% include "vrf.bird.j2" %}
 {% include "neighbors.bird.j2" %}
 
-
 # ============================================================================
 # Redistribution and Kernel Protocols
 # ============================================================================
-
 {# direct + kernel are ALWAYS generated: redistribute-connected is always on and
    BGP routes always reach the kernel FIB. The pre-import-accept / pre-export-accept
    hooks and extra-import-prefixes are optional add-ons; an absent direct:/kernel:
@@ -116,7 +115,6 @@ protocol static {
   ipv6;
   # Example: route 2001:db8::/48 reject;
 }
-
 
 # BMP Configuration
 # Used for monitoring BGP sessions.

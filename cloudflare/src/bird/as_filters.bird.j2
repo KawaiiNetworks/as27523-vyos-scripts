@@ -1,6 +1,5 @@
 # as_filters.bird.j2
 # Per-AS Prefix Sets and AS-Path (Cone Member) Sets.
-
 {% macro render_prefix_set(asn, ipversion, set_suffix,
                        exceeds_map, matrix_map,
                        limits, large_as_list) %}
@@ -30,21 +29,19 @@ define autogen_as{{ asn }}_{{ set_suffix }}{{ ipversion }} = [
 {% endif %}
 ];
 {% endmacro %}
-
 {# Connected ASNs across the default context AND every VRF (defines are global
    and shared, so VRF peers' cone/prefix sets are generated here too). IBGP uses
    the local ASN, not a connected ASN, so it is excluded. #}
 {% set connected_asns = [] %}
 {% for ntype, n in router_config['_render_neighbors'] %}{% if ntype != 'IBGP' %}{% set _ = connected_asns.append(n.asn) %}{% endif %}{% endfor %}
 {% set connected_asns = connected_asns | unique | sort %}
-
 {% for asn in connected_asns %}
 
 # ---------------------------------------------------------------------------
 # AS{{ asn }} Filtering Data
 # ---------------------------------------------------------------------------
-
 {% if asn in cs.bad_asn_set %}
+
 # AS{{ asn }} is in BAD-ASN set. All prefixes and paths will be rejected.
 define autogen_as{{ asn }}_prefix4 = [];
 define autogen_as{{ asn }}_prefix6 = [];
@@ -53,7 +50,6 @@ define autogen_as{{ asn }}_cone_prefix6 = [];
 define autogen_as{{ asn }}_cone_asns = [];
 
 function autogen_as{{ asn }}_validate_path() -> bool { return false; }
-
 {% else %}
 
 # Direct Prefix Sets
@@ -63,7 +59,6 @@ function autogen_as{{ asn }}_validate_path() -> bool { return false; }
 {{ render_prefix_set(asn, 6, "prefix", 
                      cs.cone_prefix_exceeds, cs.prefix_matrix_map, 
                      cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
-
 # Cone Prefix Sets (for downstream/peers)
 {{ render_prefix_set(asn, 4, "cone_prefix", 
                      cs.cone_prefix_exceeds, cs.cone_prefix_matrix_map, 
@@ -71,7 +66,6 @@ function autogen_as{{ asn }}_validate_path() -> bool { return false; }
 {{ render_prefix_set(asn, 6, "cone_prefix", 
                      cs.cone_prefix_exceeds, cs.cone_prefix_matrix_map, 
                      cs.config['as-set-limit'], cs.config['as-set-limit']['large-as-list']) }}
-
 # AS-Path (Cone ASN set) logic
 {% set cone_list = cs.cone_map.get(asn, []) %}
 {% set path_exceeds = asn in cs.cone_members_exceeds or (cone_list | length) + 1 > cs.config['as-set-limit'].get('member-limit', 100) %}
@@ -101,7 +95,5 @@ function autogen_as{{ asn }}_validate_path() -> bool {
   return false;
 }
 {% endif %}
-
 {% endif %}
-
 {% endfor %}

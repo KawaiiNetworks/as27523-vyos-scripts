@@ -1,5 +1,5 @@
-{# VyOS Container configuration for BIRD3 #}
-{# This template generates the commands to run BIRD3 in a high-privilege container #}
+{# VyOS Container configuration for BIRD #}
+{# This template generates the commands to run BIRD in a high-privilege container #}
 
 delete container name bird
 set container name bird image '{{ bird_image | default("kawaiinetworks/bird:2") }}'
@@ -12,4 +12,4 @@ set container name bird volume conf destination '/etc/bird'
 set container name bird volume conf source '/config/myapp/bird'
 
 {# Optional: Environment variables or custom arguments #}
-{# BIRD3 usually looks for /etc/bird/bird.conf by default #}
+{# BIRD usually looks for /etc/bird/bird.conf by default #}
