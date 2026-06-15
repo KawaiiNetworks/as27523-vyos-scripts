@@ -124,7 +124,17 @@ function autogen_apply_prepend_to_as(int asn) {
   if large_community_prepend_to_as(9, asn) ~ bgp_large_community then { bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); bgp_path.prepend(local_asn); }
 }
 
-# Outbound Filters
+# Outbound filters — directional / no-leak gate ONLY.
+#
+# These return true iff a route MAY be advertised to the given neighbor type
+# based on where it came from (valley-free: only own + customer routes go to
+# upstream/peer/route-server; everything goes to downstream). They deliberately
+# do NOT run the content hygiene (autogen_filter_ebgp: bogons / RPKI / blacklist)
+# anymore — that is applied separately in the per-neighbor out filter and is
+# SKIPPED for blackhole routes (a /32 blackhole would otherwise be RPKI-invalid
+# and dropped). This gate is mandatory and always runs, so a blackhole still
+# cannot leak the wrong way (e.g. an upstream-learned route re-advertised to
+# another upstream).
 
 function autogen_peer_out() -> bool {
   if source ~ [
@@ -141,7 +151,6 @@ function autogen_peer_out() -> bool {
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
-      if !autogen_filter_ebgp() then return false;
       return true;
     }
   }
@@ -163,7 +172,6 @@ function autogen_upstream_out() -> bool {
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
-      if !autogen_filter_ebgp() then return false;
       return true;
     }
   }
@@ -186,7 +194,6 @@ function autogen_downstream_out() -> bool {
     (large_community_from_routeserver ~ bgp_large_community) ||
     (large_community_from_peer ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
-      if !autogen_filter_ebgp() then return false;
       # Downstream usually receives all routes
       return true;
     }
@@ -209,7 +216,6 @@ function autogen_routeserver_out() -> bool {
     ]) ||
     (large_community_from_local_as ~ bgp_large_community) ||
     (large_community_from_downstream ~ bgp_large_community) then {
-      if !autogen_filter_ebgp() then return false;
       return true;
     }
   }

@@ -109,16 +109,29 @@ filter {{ filter_prefix }}_out {
   # pre export filter
 
   # export filter
-  # A blackhole route skips the base export filter (so it propagates to every
-  # neighbor type for network-wide RTBH), but NOT the control communities below
-  # — an explicit DNA/OLA must still suppress it.
+{% if ntype == 'IBGP' %}
+  # iBGP is internal — no route-leak risk here (the directional no-leak gate is
+  # enforced at every router's eBGP egress). The whole filter stays skippable so
+  # a blackhole propagates internally for network-wide RTBH.
   if !blackhole_triggered then {
 {% if is_simple %}
     if !autogen_simple_ibgp_out() then reject;
 {% else %}
-    if !autogen_{{ ntype | lower }}_out() then reject;
+    if !autogen_ibgp_out() then reject;
 {% endif %}
   }
+{% else %}
+  # The directional / no-leak gate ALWAYS runs — even a blackhole must obey
+  # valley-free routing (an upstream-learned route, even blackholed, must never
+  # be re-advertised to another upstream/peer/route-server).
+  if !autogen_{{ ntype | lower }}_out() then reject;
+  # Content hygiene (bogons / RPKI / blacklist) is skipped for blackhole routes:
+  # a /32 blackhole would otherwise be RPKI-invalid (more-specific than its ROA)
+  # and dropped.
+  if !blackhole_triggered then {
+    if !autogen_filter_ebgp() then reject;
+  }
+{% endif %}
 
   # export control communities
 {% if neighbor['_asn_public'] and not is_simple %}
