@@ -47,7 +47,9 @@ function autogen_filter_rpki() -> bool {
 
 function autogen_filter_rfc7454() ->bool {
   if net.type = NET_IP4 && net.len > 24 then return false;
+  if net.type = NET_IP4 && net.len < 8 then return false;
   if net.type = NET_IP6 && net.len > 48 then return false;
+  if net.type = NET_IP6 && net.len < 16 then return false;
   return true;
 }
 
