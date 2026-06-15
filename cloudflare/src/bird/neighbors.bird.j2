@@ -219,6 +219,8 @@ protocol bgp {{ proto_name }} {
 {% endif %}
 {% if neighbor.multihop %}
   multihop {{ neighbor.multihop }};
+{% else %}
+  direct;
 {% endif %}
 {% if neighbor.holdtime %}
   hold time {{ neighbor.holdtime }};
