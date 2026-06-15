@@ -50,6 +50,8 @@ protocol kernel kernel_vrf_{{ vid }}_v4 {
   ipv4 {
     table vrf_{{ vid }}_v4;
     export filter {
+      # Never install the synthetic default route into the host FIB.
+      if large_community_default_route ~ bgp_large_community then reject;
 {% if vkernel.get('ipv4') and vkernel['ipv4'].get('pre-export-accept') %}
 {{ vkernel['ipv4']['pre-export-accept'] | indent(6, first=True) }}
 {% endif %}
@@ -67,6 +69,8 @@ protocol kernel kernel_vrf_{{ vid }}_v6 {
   ipv6 {
     table vrf_{{ vid }}_v6;
     export filter {
+      # Never install the synthetic default route into the host FIB.
+      if large_community_default_route ~ bgp_large_community then reject;
 {% if vkernel.get('ipv6') and vkernel['ipv6'].get('pre-export-accept') %}
 {{ vkernel['ipv6']['pre-export-accept'] | indent(6, first=True) }}
 {% endif %}
@@ -80,11 +84,11 @@ protocol kernel kernel_vrf_{{ vid }}_v6 {
 
 protocol static static_vrf_{{ vid }}_v4 {
   ipv4 { table vrf_{{ vid }}_v4; };
-  route 0.0.0.0/0 unreachable { preference = 0; };
+  route 0.0.0.0/0 unreachable { preference = 0; bgp_large_community.add(large_community_default_route); };
 }
 protocol static static_vrf_{{ vid }}_v6 {
   ipv6 { table vrf_{{ vid }}_v6; };
-  route ::/0 unreachable { preference = 0; };
+  route ::/0 unreachable { preference = 0; bgp_large_community.add(large_community_default_route); };
 }
 {% endmacro %}
 {% for vname, vcfg in (router_config.vrf or {}).items() %}

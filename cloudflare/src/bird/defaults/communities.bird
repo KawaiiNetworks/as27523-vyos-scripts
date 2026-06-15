@@ -8,6 +8,11 @@ define large_community_from_upstream = (local_asn, 0, 200);
 define large_community_from_routeserver = (local_asn, 0, 300);
 define large_community_from_peer = (local_asn, 0, 400);
 define large_community_from_downstream = (local_asn, 0, 500);
+# Marks the synthetic lowest-preference default route (0.0.0.0/0 / ::/0). The
+# kernel protocol refuses to install routes carrying it (so it never enters the
+# host FIB), while it stays available for BGP default-origination. A real learned
+# default has no such marker and is installed / re-advertised normally.
+define large_community_default_route = (local_asn, 0, 0);
 
 # Community Sets
 define large_community_dna_any = [
