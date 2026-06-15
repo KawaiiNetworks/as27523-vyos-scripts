@@ -78,8 +78,14 @@ protocol kernel kernel_vrf_{{ vid }}_v6 {
   persist;
 }
 
-protocol static static_vrf_{{ vid }}_v4 { ipv4 { table vrf_{{ vid }}_v4; }; }
-protocol static static_vrf_{{ vid }}_v6 { ipv6 { table vrf_{{ vid }}_v6; }; }
+protocol static static_vrf_{{ vid }}_v4 {
+  ipv4 { table vrf_{{ vid }}_v4; };
+  route 0.0.0.0/0 reject { preference = 0; };
+}
+protocol static static_vrf_{{ vid }}_v6 {
+  ipv6 { table vrf_{{ vid }}_v6; };
+  route ::/0 reject { preference = 0; };
+}
 {% endmacro %}
 {% for vname, vcfg in (router_config.vrf or {}).items() %}
 {{ render_vrf(vname, vname | lower | replace('-', '_'), vcfg.table, (vcfg.get('protocols', {}) or {}).get('direct', {}) or {}, (vcfg.get('protocols', {}) or {}).get('kernel', {}) or {}) }}
