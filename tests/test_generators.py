@@ -298,12 +298,13 @@ class GeneratorCoverageTest(unittest.TestCase):
         else:
             # Mount the results dir into the container and parse there. ',Z' is
             # a no-op without SELinux, so this works on CI and SELinux hosts.
+            # The image's ENTRYPOINT is `bird`, so pass only its arguments.
             image = os.environ.get("BIRD_IMAGE", "kawaiinetworks/bird:2")
             cmd = [
                 podman_bin, "run", "--rm",
                 "-v", f"{RESULTS_DIR}:/conf:ro,Z",
                 image,
-                "bird", "-p", "-c", f"/conf/{conf_name}",
+                "-p", "-c", f"/conf/{conf_name}",
             ]
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
