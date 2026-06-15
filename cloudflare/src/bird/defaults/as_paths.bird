@@ -41,6 +41,13 @@ define autogen_as_cernet_asns = [
   4538
 ];
 
+# Private ASN ranges (RFC 6996). Stripped from private-ASN customer paths on
+# import so the customer's private ASN never leaks to other neighbors.
+define autogen_private_asns = [
+  64512..65534,
+  4200000000..4294967294
+];
+
 # Helper function to check if any ASN in the path belongs to a set
 # (e.g. path_contains_asn_set(autogen_as_china_asns) for a China check)
 function path_contains_asn_set(int set asns) -> bool {

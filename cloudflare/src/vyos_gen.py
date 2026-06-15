@@ -95,10 +95,9 @@ def ipv4_to_engineid(ipv4):
 # Pre-processing pass
 # ---------------------------------------------------------------------------
 #
-# The FRR generator (deprecated/cloudflare/vyos_gen.py) populated cs.bad_asn_set,
-# neighbor ids, local prefix lists, etc. as *side effects* while generating
-# commands. The BIRD path is pure template rendering, so nothing fills those
-# in. This pass replicates the FRR side effects before the templates run.
+# Template rendering is pure, so nothing fills in the derived state the
+# templates rely on (cs.bad_asn_set, neighbor ids, local prefix lists, etc.).
+# This pass computes that state before any template runs.
 
 
 def _local_asn_prefixes(cs, ipversion):
@@ -210,8 +209,8 @@ def _prepare_neighbor(cs, neighbor, ntype, vrf):
     asn = neighbor["asn"] if ntype != "ibgp" else cs.local_asn
     neighbor["_asn_public"] = validate_asn(asn) == 1
 
-    # Private ASN without an explicit prefix-list => deny-all (parity with FRR
-    # _bgp_neighbor_cmd). Intentional and exercised by the test fixture (AS65500).
+    # Private ASN without an explicit prefix-list => deny-all. Intentional and
+    # exercised by the test fixture (AS65500).
     # Warn so the operator notices the session accepts nothing until a
     # prefix-list is declared.
     if not neighbor["_asn_public"] and "prefix-list" not in neighbor:
@@ -293,8 +292,8 @@ def _prepare_for_bird(cs, router_config):
     Input: cs — the CacheStore (read for pdb/bgpq4/as-set data; mutated:
     neighbor_id_hashmap, bad_asn_set, warnings); router_config — one router's
     config dict (mutated in place).
-    No return value. Runs before any template renders and produces the side
-    effects the old FRR generator emitted inline:
+    No return value. Runs before any template renders and produces the derived
+    state the templates rely on:
       - processes every neighbor across the default context AND each VRF
         (see _routing_contexts / _prepare_neighbor): nid, flags, prefix split;
         VRF neighbors are tagged `_vrf`
@@ -422,8 +421,8 @@ async def generate_router_script(cs, router_config, worker_base_url=""):
     configure_body = ""
 
     # Services
-    # NOTE: BMP is NOT configured here — it is an FRR feature. Under BIRD the
-    # BMP protocols are rendered directly into bird.conf (header.bird.j2).
+    # NOTE: BMP is not configured here — the BMP protocols are rendered
+    # directly into bird.conf (header.bird.j2).
     if "service" in router_config:
         if "sflow" in router_config["service"]:
             configure_body += gen_sflow(cs, router_config["service"]["sflow"])

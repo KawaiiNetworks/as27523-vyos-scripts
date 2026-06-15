@@ -30,9 +30,6 @@ kernel + direct + static protocols (redistribution)
 BMP monitoring
 ```
 
-> The previous **vyos + FRR** generator (which emitted `policy route-map`, `protocols bgp neighbor`,
-> `system frr`, etc. as VyOS `set` commands) is retired under `deprecated/`.
-
 ## Current Architecture
 
 -   `AS{ASN}` is the config repository. It stores `network/vyos/vyos.yaml` and the generated cache files under `cache/`.

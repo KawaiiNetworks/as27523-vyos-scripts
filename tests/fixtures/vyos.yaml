@@ -51,7 +51,7 @@ router:
         TEST-V4: [ "198.51.100.0/24{24,32}" ]
         TEST-V6: [ "2001:db8:100::/48{48,64}" ]
       as-sets:
-        TEST-AS-PATH: [15169]   # was FRR as-path-list regex "_15169_"
+        TEST-AS-PATH: [15169]   # AS-path set: matches any path containing AS15169
 
     protocols:
       rpki:

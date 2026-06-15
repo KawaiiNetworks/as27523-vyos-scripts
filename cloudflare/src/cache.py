@@ -100,7 +100,7 @@ class CacheStore:
       blacklist_asset_members: {"AS-SET": [asn, ...]}    as-set 展开；blacklist 展开
       defaultconfig          : str                       合并后的 defaults 文本（已替换 ${ASN}）
 
-    B. 运行时副作用状态（FRR 边生成边填；BIRD 由 _prepare_for_bird 预填）
+    B. 运行时副作用状态（由 _prepare_for_bird 预填）
       bad_asn_set            : {asn}                     Tier1 / AS0 / 超限标记
       neighbor_id_hashmap    : {nid: raw_str}            NID 去重 / 撞车检测
       warnings               : list[str]                 skip / bad-asn 告警

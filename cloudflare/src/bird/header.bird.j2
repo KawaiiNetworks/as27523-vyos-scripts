@@ -3,7 +3,7 @@
 # Router ID: {{ router_id }}
 
 {% if cs.warnings %}
-# WARNINGS / SKIPPED ITEMS (see PARITY.md)
+# WARNINGS / SKIPPED ITEMS
 {% for w in cs.warnings %}
 #   - {{ w }}
 {% endfor %}
@@ -34,10 +34,10 @@ define local_asn = {{ cs.local_asn }};
 # Redistribution and Kernel Protocols
 # ============================================================================
 
-{# direct + kernel are ALWAYS generated (parity with FRR: redistribute connected
-   is always on and BGP routes always reach the kernel FIB). The pre-import-accept
-   / pre-export-accept hooks and extra-import-prefixes are optional add-ons; an
-   absent direct:/kernel: block just means base behaviour (whitelist / accept). #}
+{# direct + kernel are ALWAYS generated: redistribute-connected is always on and
+   BGP routes always reach the kernel FIB. The pre-import-accept / pre-export-accept
+   hooks and extra-import-prefixes are optional add-ons; an absent direct:/kernel:
+   block just means base behaviour (whitelist / accept). #}
 {% set direct = router_config.protocols.direct | default({}, true) %}
 {% set kernel = router_config.protocols.kernel | default({}, true) %}
 

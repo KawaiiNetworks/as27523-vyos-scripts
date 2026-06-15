@@ -733,8 +733,7 @@ def main():
         action="store_true",
         help=(
             "Build defaults_bundle.txt from scripts repo defaults/ directory "
-            "(now only system/ defaults, e.g. the update-config scheduler; the "
-            "FRR policy defaults were retired — see deprecated/)"
+            "(only system/ defaults, e.g. the update-config scheduler)"
         ),
     )
     parser.add_argument(
