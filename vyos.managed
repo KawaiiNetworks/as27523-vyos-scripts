@@ -1,17 +1,3 @@
 system task-scheduler task update-config
-policy as-path-list
-policy prefix-list
-policy prefix-list6
-policy large-community-list
-policy route-map
-protocols rpki
-protocols bgp address-family
-protocols bgp parameters
-protocols bgp system-as
-protocols bgp neighbor
-protocols bgp bmp
-system frr
 system sflow
 service snmp
-system ip protocol
-system ipv6 protocol
