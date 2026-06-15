@@ -68,9 +68,6 @@ protocol device {
 }
 
 protocol direct {
-  # vrf "default": only non-VRF interfaces, so VRF-interface connected routes do
-  # not leak into the main table (they belong to their own VRF direct below).
-  vrf "default";
   ipv4 { import filter filter_direct_import_v4; };
   ipv6 { import filter filter_direct_import_v6; };
   interface "*";
