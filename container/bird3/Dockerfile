@@ -44,8 +44,9 @@ RUN apk add --no-cache \
 # bird daemon, birdc (readline client) and birdcl (standalone client).
 COPY --from=builder /usr/local/sbin/bird* /usr/local/sbin/
 
-# This directory must be mounted as a local volume with '-v `pwd`/bird:/etc/bird:rw' docker's command line option.
+# /etc/bird must be mounted as a local volume with '-v `pwd`/bird:/etc/bird:rw' docker's command line option.
 # The host's file at `pwd`/bird/bird.conf is used as the configuration file for BIRD.
-RUN mkdir /etc/bird
+RUN mkdir -p /etc/bird /usr/local/var/run
 
-CMD bird -c /etc/bird/bird.conf -d
+ENTRYPOINT [ "bird" ]
+CMD [ "-c", "/etc/bird/bird.conf", "-d" ]
