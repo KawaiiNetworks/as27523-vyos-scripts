@@ -6,6 +6,7 @@ Uses Jinja2 templates for command/config generation.
 import hashlib
 import ipaddress
 import os
+import re
 from jinja2 import Environment, FileSystemLoader
 
 from cache import validate_asn, TIER1_ASNS
@@ -56,6 +57,37 @@ def is_unnumbered(s):
     except ValueError:
         return False
     return ip.version == 6 and ip.is_link_local
+
+
+def is_range(s):
+    """Check whether a string is a BIRD dynamic-BGP neighbor range.
+
+    Input: s — a candidate neighbor-address string.
+    Return: the prefix string (e.g. "fe80::/64") if `s` has the form
+    "range <prefix>" with a valid network, else None. Used to render
+    `neighbor range <prefix> as <asn>` (dynamic BGP).
+    """
+    s = str(s).strip()
+    if not s.startswith("range "):
+        return None
+    prefix = s[len("range "):].strip()
+    try:
+        ipaddress.ip_network(prefix, strict=False)
+    except ValueError:
+        return None
+    return prefix
+
+
+def is_interface(s):
+    """Check whether a string is a bare interface name (unnumbered auto-peering).
+
+    Input: s — a candidate neighbor-address string.
+    Return: True for a plain interface name like "wg1242" or "eth5" (letter
+    then word chars / dot / dash; no IP punctuation, no "%", no "range ").
+    Such a neighbor triggers auto RAdv + dynamic BGP over fe80::/64.
+    """
+    s = str(s)
+    return bool(re.fullmatch(r"[A-Za-z][\w.-]*", s)) and not is_ip(s)
 
 
 def get_neighbor_id(cs, neighbor):
@@ -255,15 +287,35 @@ def _prepare_neighbor(cs, neighbor, ntype, vrf):
                 "not an IP; ignored."
             )
 
-    # A neighbor address must be a plain IP or a BIRD unnumbered link-local
-    # "%iface" form. A bare interface name (e.g. "wg-test") is a config error —
-    # fail loudly rather than silently skip.
-    bad = [a for a in addrs if not is_ip(a) and not is_unnumbered(a)]
-    if bad:
-        raise ValueError(
-            f"AS{asn} ({ntype}): invalid neighbor-address {bad} — "
-            "must be an IP or link-local '%iface' (e.g. fe80::1%wg)."
-        )
+    # neighbor-address forms (a dynamic form must be the SINGLE address, not
+    # mixed into a list with IPs):
+    #   - plain IP / "<ll>%<iface>" -> normal per-address session(s)
+    #   - "range <prefix>"          -> dynamic BGP listening on that range
+    #   - bare interface name       -> auto unnumbered: RAdv + dynamic BGP on fe80::/64
+    rng = is_range(addrs[0]) if len(addrs) == 1 else None
+    iface = addrs[0] if (len(addrs) == 1 and is_interface(addrs[0])) else None
+    if rng:
+        neighbor["_range"] = rng
+    elif iface:
+        neighbor["_unnumbered_iface"] = iface
+        # One RAdv per interface; two unnumbered neighbors on the same interface
+        # would emit duplicate `protocol radv` (BIRD rejects that).
+        radv_ifaces = cs.__dict__.setdefault("radv_ifaces", set())
+        if iface in radv_ifaces:
+            cs.warnings.append(
+                f"AS{asn} ({ntype}): interface '{iface}' is used by more than one "
+                "unnumbered neighbor; BIRD rejects duplicate radv on one interface."
+            )
+        radv_ifaces.add(iface)
+    else:
+        # Plain IP / link-local only. Anything else (a bare name that is not a
+        # valid interface, or a range/iface mixed into a list) is a config error.
+        bad = [a for a in addrs if not is_ip(a) and not is_unnumbered(a)]
+        if bad:
+            raise ValueError(
+                f"AS{asn} ({ntype}): invalid neighbor-address {bad} — must be an IP, "
+                "link-local '%iface', 'range <prefix>', or a bare interface name."
+            )
     return asn
 
 

@@ -172,6 +172,110 @@ filter {{ filter_prefix }}_out {
 {% set mp_out = cs.maximum_prefix_map.get(cs.local_asn, [1, 1]) %}
 {% set af = neighbor['address-family'] %}
 {% set addrs = [neighbor['neighbor-address']] if neighbor['neighbor-address'] is string else neighbor['neighbor-address'] %}
+{% if neighbor.get('_unnumbered_iface') or neighbor.get('_range') %}
+{# Dynamic BGP. `_range` => listen for incoming peers in that prefix. An
+   `_unnumbered_iface` => auto unnumbered: a per-neighbor RAdv discovers the
+   peer's link-local into `unnumbered_<base>`, and the dynamic BGP peers over
+   fe80::/64. Spawned sessions inherit the parent channels' filters. #}
+{% set unnum = neighbor.get('_unnumbered_iface') %}
+{% set rng = 'fe80::/64' if unnum else neighbor['_range'] %}
+{% set rng_v6 = ':' in rng %}
+{% if af %}
+{% set want4 = af.ipv4 | default(false) %}
+{% set want6 = af.ipv6 | default(false) %}
+{% elif unnum or neighbor['extended-nexthop'] %}
+{% set want4 = true %}
+{% set want6 = true %}
+{% else %}
+{% set want4 = not rng_v6 %}
+{% set want6 = rng_v6 %}
+{% endif %}
+{% if unnum %}
+neighbor table unnumbered_{{ proto_base }};
+protocol radv radv_{{ proto_base }} {
+{% if neighbor.get('_vrf') %}
+  vrf "{{ neighbor['_vrf'].name }}";
+{% endif %}
+  neighbors { table unnumbered_{{ proto_base }}; };
+  interface "{{ unnum }}" { router discovery yes; };
+}
+{% endif %}
+protocol bgp {{ proto_base }} {
+  description "{{ neighbor.description | default(ntype[:1].upper() ~ ': ' ~ cs.as_name_map.get(asn, 'AS' ~ (asn | string))) }}";
+{% if neighbor.get('_vrf') %}
+  vrf "{{ neighbor['_vrf'].name }}";
+{% endif %}
+  local as {% if neighbor['local-asn'] %}{{ neighbor['local-asn'] }}{% else %}{{ cs.local_asn }}{% endif %};
+  neighbor range {{ rng }} as {{ asn }};
+  dynamic name "{{ proto_base }}_";
+  dynamic name digits 2;
+{% if is_shutdown %}
+  disabled;
+{% endif %}
+{% if neighbor.passive %}
+  passive on;
+{% endif %}
+{% if neighbor.password %}
+  password "{{ neighbor.password }}";
+{% endif %}
+  graceful restart on;
+{% if want4 %}
+
+  ipv4 {
+{% if neighbor.get('_vrf') %}
+    table vrf_{{ neighbor['_vrf'].id }}_v4;
+{% endif %}
+    import filter {{ filter_prefix }}_in;
+{% if neighbor['default-originate'] %}
+    export filter { if net = 0.0.0.0/0 then accept; reject; };
+{% else %}
+    export filter {{ filter_prefix }}_out;
+{% endif %}
+    next hop self;
+{% if unnum or rng_v6 or neighbor['extended-nexthop'] %}
+    # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (session runs over IPv6).
+    extended next hop;
+{% endif %}
+{% if ntype in ['Peer', 'Downstream'] %}
+    import limit {{ mp_in[0] }} action disable;
+{% endif %}
+{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
+    export limit {{ mp_out[0] }} action disable;
+{% endif %}
+{% if neighbor.addpath %}
+    add paths tx;
+{% endif %}
+  };
+{% endif %}
+{% if want6 %}
+
+  ipv6 {
+{% if neighbor.get('_vrf') %}
+    table vrf_{{ neighbor['_vrf'].id }}_v6;
+{% endif %}
+    import filter {{ filter_prefix }}_in;
+{% if neighbor['default-originate'] %}
+    export filter { if net = ::/0 then accept; reject; };
+{% else %}
+    export filter {{ filter_prefix }}_out;
+{% endif %}
+    next hop self;
+{% if ntype in ['Peer', 'Downstream'] %}
+    import limit {{ mp_in[1] }} action disable;
+{% endif %}
+{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
+    export limit {{ mp_out[1] }} action disable;
+{% endif %}
+{% if neighbor.addpath %}
+    add paths tx;
+{% endif %}
+  };
+{% endif %}
+{% if unnum %}
+  neighbors { table unnumbered_{{ proto_base }}; export all; };
+{% endif %}
+}
+{% else %}
 {# Each neighbor address becomes its own `protocol bgp`. The _v4/_v6 suffix
    reflects the PEER ADDRESS family (is_v6), not the address-family/channels:
    a v4-peer or v6-peer session can still carry both ipv4 and ipv6 channels
@@ -284,6 +388,7 @@ protocol bgp {{ proto_name }} {
 {% endif %}
 }
 {% endfor %}
+{% endif %}
 {% endmacro %}
 # Rendering Session Filters
 {# _render_neighbors is the flat (ntype, neighbor) list built by _prepare_for_bird,

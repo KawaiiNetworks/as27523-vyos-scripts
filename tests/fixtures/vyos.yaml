@@ -170,6 +170,15 @@ router:
             description: Unnumbered downstream (link-local)
             neighbor-address: "fe80::1%wg"
             extended-nexthop: true
+          - asn: 64600
+            description: Range downstream (dynamic, listens on the prefix)
+            prefix-list:
+              - 203.0.113.128/26
+            neighbor-address: "range 203.0.113.128/26"
+          - asn: 64601
+            description: Auto-unnumbered downstream (RAdv + dynamic BGP over fe80::/64)
+            neighbor-address: wgauto
+            extended-nexthop: true
 
       # direct: which local (RTS_DEVICE) routes enter BIRD and are advertised.
       # Replaces the former top-level `redistribute`. Base whitelist = local-asn
@@ -217,6 +226,10 @@ router:
                 description: VRF blue downstream
                 neighbor-address: 192.0.2.60
                 source-address: 192.0.2.61
+              - asn: 64700
+                description: VRF blue auto-unnumbered downstream
+                neighbor-address: wgblue
+                extended-nexthop: true
           direct:
             extra-import-prefixes: [TEST-V4]
             pre-import-accept: |
