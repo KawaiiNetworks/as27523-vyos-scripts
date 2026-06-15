@@ -196,7 +196,7 @@ def aggregate_prefixes_modified(prefix_matrix, ipversion):
     # le = /32 (v4) /128 (v6): keep the peer's full IRR space, including objects
     # more specific than /24/48, so the generated cone/prefix sets represent it
     # faithfully. RFC 7454 max-length (reject >/24, >/48) is applied in the BIRD
-    # filter (autogen_filter_ebgp_in), not by truncating the set here.
+    # filter (autogen_filter_ebgp), not by truncating the set here.
     return [
         [
             str(p.network_address),

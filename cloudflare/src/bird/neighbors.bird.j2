@@ -46,11 +46,11 @@ filter {{ filter_prefix }}_in {
 {% endif %}
 {% if 'no-in-filter' not in neighbor %}
 {% if neighbor['_asn_public'] %}
-      if !{{ 'autogen_filter_ibgp()' if ntype == 'IBGP' else 'autogen_filter_ebgp_in()' }} then reject;
+      if !{{ 'autogen_filter_ibgp()' if ntype == 'IBGP' else 'autogen_filter_ebgp()' }} then reject;
 {% else %}
       # private ASN: its private ASNs are stripped from the as-path in the
       # attr section below.
-      if !autogen_filter_ebgp_in() then reject;
+      if !autogen_filter_ebgp() then reject;
 {% endif %}
 {% endif %}
     }

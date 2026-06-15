@@ -8,12 +8,12 @@
 {# Cone/prefix sets carry the peer's true IRR space down to /32 (v4) /128 (v6),
    so IRR objects more specific than /24/48 are retained (not dropped) and a
    future blackhole path can match them. RFC 7454 max-length (reject >/24, >/48)
-   is enforced separately in autogen_filter_ebgp_in (defaults/filters.bird). #}
+   is enforced separately in autogen_filter_ebgp (defaults/filters.bird). #}
 {% set max_length = 32 if ipversion == 4 else 128 %}
 define autogen_as{{ asn }}_{{ set_suffix }}{{ ipversion }} = [
 {% if exceeds %}
 {% if asn in large_as_list %}
-  {{ "0.0.0.0/0{0,24}" if ipversion == 4 else "::/0{0,48}" }}
+  {{ "0.0.0.0/0{0,32}" if ipversion == 4 else "::/0{0,128}" }}
 {% endif %}
 {% else %}
 {% for prefix in prefix_list %}

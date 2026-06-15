@@ -39,10 +39,17 @@ function autogen_filter_rpki() -> bool {
   return true;
 }
 
+function autogen_filter_rfc7454() ->bool {
+  if net.type = NET_IP4 && net.len > 24 then return false;
+  if net.type = NET_IP6 && net.len > 48 then return false;
+  return true;
+}
+
 function autogen_filter_ebgp() -> bool {
   if !autogen_reject_bogons() then return false;
   if !autogen_filter_rpki() then return false;
   if !autogen_filter_blacklist() then return false;
+  if !autogen_filter_rfc7454() then return false;
   return true;
 }
 
@@ -57,26 +64,6 @@ function autogen_filter_ibgp() -> bool {
   }
   if !autogen_reject_bogons() then return false;
   return true;
-}
-
-# Inbound: filter (predicate) vs. attrs (side effects)
-#
-# The inbound path is split in two so a per-neighbor filter can run the filter
-# WITHOUT the attrs (e.g. skip filtering for an extra-import-prefixes match) or
-# vice versa. `autogen_*_in` (filter + attrs fused) used to do both at once.
-#
-#   autogen_filter_ebgp_in()  -> bool   eBGP inbound predicate (shared)
-#   autogen_<ntype>_attrs()             set route attrs for an accepted route
-
-# eBGP inbound predicate: RFC 7454 max prefix length + the eBGP filter core.
-# The /24 (v4) and /48 (v6) max-length lives here (inbound only) rather than in
-# autogen_filter_ebgp(), which is also used outbound — we still want to be able
-# to ORIGINATE / re-announce more-specifics, and a future blackhole inbound path
-# will deliberately skip this max-length while keeping the cone check.
-function autogen_filter_ebgp_in() -> bool {
-  if net.type = NET_IP4 && net.len > 24 then return false;
-  if net.type = NET_IP6 && net.len > 48 then return false;
-  return autogen_filter_ebgp();
 }
 
 function autogen_peer_attrs() {
