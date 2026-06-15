@@ -5,7 +5,7 @@ Uses JS `fetch` and `Headers` from Pyodide to make HTTP requests,
 as the Cloudflare Workers Python runtime does not support `requests`.
 """
 
-from js import fetch, Headers
+from js import fetch, Headers, AbortSignal
 import json
 import urllib.parse
 
@@ -26,6 +26,14 @@ def _make_headers(d):
 
 
 _UA = {"User-Agent": "VyOS-Config-Worker"}
+
+# Subrequest timeouts. Without these a stalled origin (GitHub raw, or a DoH
+# provider unreachable from the serving colo) makes `await fetch` hang forever
+# and the CF runtime kills the whole request as "hung". A timeout turns that
+# into a normal exception we can fail over from / surface as a 500.
+_HTTP_TIMEOUT_MS = 8000
+_DOH_TIMEOUT_MS = 5000
+
 _DOH_PROVIDERS = [
     (
         "google-json",
@@ -48,7 +56,13 @@ async def github_raw(user, repo, path):
     (e.g. 404 missing file). Network/fetch errors propagate as exceptions.
     """
     url = f"https://raw.githubusercontent.com/{user}/{repo}/main/{path}"
-    resp = await fetch(url, {"headers": _make_headers(_UA)})
+    resp = await fetch(
+        url,
+        {
+            "headers": _make_headers(_UA),
+            "signal": AbortSignal.timeout(_HTTP_TIMEOUT_MS),
+        },
+    )
     if resp.status != 200:
         return None
     return await resp.text()
@@ -142,6 +156,7 @@ async def resolve_router_id(router_name):
                     "headers": _make_headers(
                         {**_UA, "Accept": "application/dns-json"}
                     ),
+                    "signal": AbortSignal.timeout(_DOH_TIMEOUT_MS),
                 },
             )
             text = await resp.text()
