@@ -77,4 +77,14 @@ mkdir -p /config/myapp/bird
 curl -sSfLo /config/myapp/bird/bird.conf "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"
 
 sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
+
+# Host convenience: a `birdc` wrapper on PATH opens the container's BIRD client
+# (works for any user, sudo and scripts, unlike a shell alias). Rewritten every
+# run via tee, so it is idempotent and always reflects the current command.
+sudo tee /usr/local/bin/birdc >/dev/null <<'EOF'
+#!/bin/sh
+exec sudo podman exec -it bird birdc -s /etc/bird/bird.ctl "$@"
+EOF
+sudo chmod +x /usr/local/bin/birdc
+
 exit
