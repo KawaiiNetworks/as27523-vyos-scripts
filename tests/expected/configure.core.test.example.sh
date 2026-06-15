@@ -37,7 +37,7 @@ set service snmp v3 user vyos privacy encrypted-password encrypted
 set service snmp v3 user vyos privacy type aes
 set service snmp v3 view default oid 1
 delete container name bird
-set container name bird image 'pierky/bird'
+set container name bird image 'kawaiinetworks/bird:2'
 set container name bird allow-host-networks
 set container name bird capability 'net-admin'
 set container name bird restart 'always'

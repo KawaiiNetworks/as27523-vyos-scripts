@@ -8,7 +8,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Run the full test suite first; deploy only if it passes.
+  test:
+    uses: ./.github/workflows/tests.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
