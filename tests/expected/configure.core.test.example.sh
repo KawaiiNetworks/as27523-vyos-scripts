@@ -72,11 +72,18 @@ echo 'configure done'
 
 commit
 
-# Download generated BIRD configuration
+# Download the generated BIRD config to a temp file in the SAME dir, then swap
+# it in atomically (mv = rename). A failed/partial download must never clobber
+# the working bird.conf — only reload BIRD when the new config is actually in.
 mkdir -p /config/myapp/bird
-curl -sSfLo /config/myapp/bird/bird.conf "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"
-
-sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
+TMP_BIRD_CONF=$(mktemp /config/myapp/bird/.bird.conf.XXXXXX)
+if curl -sSfL -o "$TMP_BIRD_CONF" "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"; then
+    mv "$TMP_BIRD_CONF" /config/myapp/bird/bird.conf
+    sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
+else
+    echo "bird.conf download failed; keeping the existing config" >&2
+    rm -f "$TMP_BIRD_CONF"
+fi
 
 # Host convenience: a `birdc` wrapper on PATH opens the container's BIRD client
 # (works for any user, sudo and scripts, unlike a shell alias). Rewritten every

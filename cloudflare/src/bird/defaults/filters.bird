@@ -30,11 +30,17 @@ function autogen_reject_bogons() -> bool {
 }
 
 function autogen_filter_rpki() -> bool {
+  int origin_asn;
+  if bgp_path.len = 0 then {
+    origin_asn = local_asn;
+  } else {
+    origin_asn = bgp_path.last;
+  }
   if net.type = NET_IP4 then {
-    if roa_check(t_roa4, net, bgp_path.last) = ROA_INVALID then return false;
+    if roa_check(t_roa4, net, origin_asn) = ROA_INVALID then return false;
   }
   if net.type = NET_IP6 then {
-    if roa_check(t_roa6, net, bgp_path.last) = ROA_INVALID then return false;
+    if roa_check(t_roa6, net, origin_asn) = ROA_INVALID then return false;
   }
   return true;
 }
