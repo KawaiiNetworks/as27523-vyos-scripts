@@ -34,12 +34,11 @@ BMP monitoring
 
 -   `AS{ASN}` is the config repository. It stores `network/vyos/vyos.yaml` and the generated cache files under `cache/`.
 -   This repository stores the generator code, default templates, helper tools, and the Cloudflare Worker.
--   `configure/save-cache.py` prepares `cache/pdb/summary.json`, `cache/bgpq4/summary.json`, `cache/as-set/summary.json`, and `cache/defaults_bundle.txt` for the config repository.
+-   `configure/save-cache.py` prepares `cache/pdb/summary.json`, `cache/bgpq4/summary.json`, and `cache/as-set/summary.json` for the config repository.
 -   The Cloudflare Worker reads `vyos.yaml` and the cache files directly from GitHub, then serves:
     -   `/{user}/{config_repo}/router/configure.{router}.sh` — VyOS host setup script
     -   `/{user}/{config_repo}/router/bird.{router}.conf` — generated `bird.conf` for the router
-    -   `/{user}/{config_repo}/router/defaultconfig.sh` — VyOS default config bundle
--   The default scheduler downloads the latest script from the Worker every 12 hours and applies it on the router.
+-   The `configure.{router}.sh` installs an `update-config` scheduler that re-downloads and re-applies the script from the Worker every 12 hours.
     The host script in turn fetches `bird.{router}.conf` into the container and reloads BIRD.
 
 ## How to use
@@ -48,11 +47,10 @@ BMP monitoring
 -   Create a new repository named `AS{Your ASN}`.
 -   Create `network/vyos/vyos.yaml` in the `AS{Your ASN}` repository. You can refer to the example at https://github.com/KawaiiNetworks/AS27523/tree/main/network/vyos/vyos.yaml
 -   Install local dependencies for cache generation:
-    -   `cd configure`
-    -   `./install-dependencies.sh`
+    -   Python deps are managed by [pixi](https://pixi.sh): run `pixi install` in the repo root.
+    -   `bgpq4` is a separate system tool (not on conda-forge) — install it via your package manager, e.g. `apt-get install bgpq4` or `brew install bgpq4`.
 -   Build cache files into the config repository:
-    -   `python save-cache.py /path/to/AS{Your ASN}`
-    -   `python save-cache.py /path/to/AS{Your ASN} --defaults-bundle --scripts-dir /path/to/as{Your ASN}-vyos-scripts`
+    -   `pixi run python configure/save-cache.py /path/to/AS{Your ASN}`
 -   Deploy the Cloudflare Worker from this repository using the `Deploy Cloudflare Worker` GitHub Actions workflow.
 -   Use the Worker URL to fetch `configure.{router}.sh`, or let the installed `update-config` scheduler refresh it automatically on the router.
 

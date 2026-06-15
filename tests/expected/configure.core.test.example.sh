@@ -13,8 +13,27 @@ echo 'start configure (bird3)'
 
 configure
 
-set system host-name test-router
+# update-config scheduler: refresh and re-apply this router's config every 12h.
+if [ ! -d "/config/myapp" ]; then
+    sudo mkdir -p /config/myapp
+fi
 
+sudo chown vyos -R /config/myapp
+
+cat <<EOL > /config/myapp/update-config.sh
+#!/bin/bash
+
+wget -T 60 -O /config/myapp/configure.${ROUTER}.sh https://worker.example/kawaii/as27523/router/configure.${ROUTER}.sh
+wget -T 60 -O /config/myapp/find_unused.py https://worker.example/kawaii/as27523/find_unused.py
+vbash /config/myapp/configure.${ROUTER}.sh | tee /config/myapp/configure.log
+rm /config/myapp/configure.${ROUTER}.sh
+EOL
+
+chmod +x /config/myapp/update-config.sh
+
+delete system task-scheduler task update-config
+set system task-scheduler task update-config executable path '/config/myapp/update-config.sh'
+set system task-scheduler task update-config interval '12h'
 
 delete system sflow
 set system sflow agent-address 192.0.2.254

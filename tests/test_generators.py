@@ -93,7 +93,6 @@ class FakeCacheStore:
         self.warnings = []
         self.local_asn = config["local-asn"]
         self.config = config
-        self.defaultconfig = (CACHE_DIR / "defaults_bundle.txt").read_text()
         self.blacklist_asset_members = _load_json("as-set/summary.json")
         self._validate_asn = cache_module.validate_asn
 

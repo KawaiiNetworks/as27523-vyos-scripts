@@ -1,11 +1,11 @@
 """
 Cache loading and ASN data management for the Cloudflare Worker.
 
-Loads PDB/bgpq4 summary.json and defaults_bundle.txt from the config repo,
-providing the data structures needed by vyos_gen.py.
+Loads PDB/bgpq4/as-set summary.json from the config repo, providing the data
+structures needed by vyos_gen.py.
 """
 
-from github import github_raw, github_raw_json
+from github import github_raw_json
 
 # ---------------------------------------------------------------------------
 # ASN validation
@@ -98,7 +98,6 @@ class CacheStore:
       cone_members_exceeds   : {asn}                     bgpq4 标志；bad-asn 检测
       cone_prefix_exceeds    : {(ipver, asn)}            bgpq4 标志；bad-asn 检测、as_filters
       blacklist_asset_members: {"AS-SET": [asn, ...]}    as-set 展开；blacklist 展开
-      defaultconfig          : str                       合并后的 defaults 文本（已替换 ${ASN}）
 
     B. 运行时副作用状态（由 _prepare_for_bird 预填）
       bad_asn_set            : {asn}                     Tier1 / AS0 / 超限标记
@@ -122,7 +121,6 @@ class CacheStore:
         self.blacklist_asset_members = {}    # {"AS-SET": [asn, ...]}
         self.local_asn = 0                   # int
         self.config = {}                     # dict（整份 YAML）
-        self.defaultconfig = ""              # str（合并后 defaults，已替换 ${ASN}）
         # --- B. 运行时副作用状态（BIRD 由 _prepare_for_bird 预填） ---
         self.bad_asn_set = set()             # {asn}
         self.neighbor_id_hashmap = {}        # {nid: raw_str}
@@ -168,36 +166,17 @@ class CacheStore:
             tuple(x) for x in data.get("cone_prefix6", [])
         ]
 
-    async def _load_defaults(self, user, config_repo):
-        """Fetch and store the merged defaults bundle (one GitHub request).
-
-        Input: user, config_repo — locate cache/defaults_bundle.txt in the
-        config repo; reads self.local_asn for the ${ASN} substitution.
-        No return value. Side effect: sets self.defaultconfig to the bundle
-        text with ${ASN} replaced and a trailing newline ensured. Raises
-        ValueError if the bundle file is missing.
-        """
-        text = await github_raw(user, config_repo, "cache/defaults_bundle.txt")
-        if text is None:
-            raise ValueError(
-                f"defaults_bundle.txt not found in {user}/{config_repo}/cache/. "
-                "Run save-cache.py --defaults-bundle first."
-            )
-        self.defaultconfig = text.replace(r"${ASN}", str(self.local_asn))
-        if self.defaultconfig and not self.defaultconfig.endswith("\n"):
-            self.defaultconfig += "\n"
-
     async def preload_all(self, user, config_repo, config):
         """Load every cache input needed to generate one router's config.
 
         Input: user, config_repo — the config repo to fetch from; config —
         the parsed vyos.yaml dict. No return value. Side effects: fills this
         CacheStore's "A" group maps in place — collects all ASNs (+ local ASN)
-        from the config, fetches pdb / bgpq4 / as-set summaries and the
-        defaults bundle from GitHub, then applies pdb data to every ASN and
-        bgpq4 data to peer/downstream public ASNs.
+        from the config, fetches pdb / bgpq4 / as-set summaries from GitHub,
+        then applies pdb data to every ASN and bgpq4 data to peer/downstream
+        public ASNs.
 
-        Network: 4 GitHub fetches (pdb + bgpq4 + defaults + as-set). Private
+        Network: 3 GitHub fetches (pdb + bgpq4 + as-set). Private
         ASNs get synthetic pdb defaults (no lookup); ASNs missing from the pdb
         summary get "Unknown AS" placeholders.
         """
@@ -256,9 +235,6 @@ class CacheStore:
         for asn in sorted(peer_downstream_asns):
             if validate_asn(asn) == 1 and bgpq4_summary and str(asn) in bgpq4_summary:
                 self._apply_bgpq4(asn, bgpq4_summary[str(asn)])
-
-        # Load defaults bundle (1 request)
-        await self._load_defaults(user, config_repo)
 
         # Load as-set member cache (1 request)
         asset_data = await github_raw_json(

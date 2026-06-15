@@ -12,3 +12,9 @@ test = "python -m unittest tests.test_generators"
 python = ">=3.14.6,<3.15"
 jinja2 = ">=3.1.6,<4"
 pyyaml = ">=6.0.3,<7"
+requests = ">=2.32,<3"
+
+# aggregate-prefixes is PyPI-only (pure Python); bgpq4 is a C tool that is not
+# on conda-forge — install it from your system package manager (apt/brew).
+[pypi-dependencies]
+aggregate-prefixes = "*"

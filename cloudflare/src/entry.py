@@ -6,7 +6,6 @@ URL routing:
   GET /{user}/{config_repo}/router/configure.{name}.sh  → VyOS host setup script
                                                           (container, sflow, snmp, defaults)
   GET /{user}/{config_repo}/router/bird.{name}.conf     → generated bird.conf for the router
-  GET /{user}/{config_repo}/router/defaultconfig.sh     → VyOS default config bundle
 """
 
 from workers import Response
@@ -46,7 +45,6 @@ async def _handle(request):
     then dispatches on `resource`:
       - router/configure.{name}.sh → VyOS host setup script
       - router/bird.{name}.conf     → generated bird.conf
-      - router/defaultconfig.sh     → VyOS default config bundle
       - "" (index)                  → HTML overview page
       - anything else               → 404
     May perform network I/O (GitHub fetches, DoH router-id resolution).
@@ -60,8 +58,7 @@ async def _handle(request):
             "Usage: /{user}/{config_repo}/\n\n"
             "Resources:\n"
             "  router/configure.{name}.sh\n"
-            "  router/bird.{name}.conf\n"
-            "  router/defaultconfig.sh\n",
+            "  router/bird.{name}.conf\n",
             headers={"content-type": "text/plain"},
         )
 
@@ -103,9 +100,6 @@ async def _handle(request):
             )
         cs = CacheStore()
         await cs.preload_all(user, config_repo, config)
-        cs.defaultconfig = cs.defaultconfig.replace(
-            r"${WORKER_BASE_URL}", worker_base_url
-        )
         script = await generate_router_script(cs, target, worker_base_url)
         return Response(script, headers={"content-type": "text/plain; charset=utf-8"})
 
@@ -125,19 +119,6 @@ async def _handle(request):
         bird_conf = gen_bird_config(cs, target, router_id)
         return Response(
             bird_conf, headers={"content-type": "text/plain; charset=utf-8"}
-        )
-
-    # --- Route: default config bundle ---
-    elif resource == "router/defaultconfig.sh":
-        cs = CacheStore()
-        cs.local_asn = local_asn
-        await cs._load_defaults(user, config_repo)
-        cs.defaultconfig = cs.defaultconfig.replace(
-            r"${WORKER_BASE_URL}", worker_base_url
-        )
-        return Response(
-            cs.defaultconfig,
-            headers={"content-type": "text/plain; charset=utf-8"},
         )
 
     # --- Route: index page ---

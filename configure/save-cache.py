@@ -8,7 +8,6 @@ save-cache.py — 为 Cloudflare Worker 将 PeeringDB 和 bgpq4 数据缓存到�
     python save-cache.py /path/to/AS27523 --bgpq4-only
     python save-cache.py /path/to/AS27523 --arin-only
     python save-cache.py /path/to/AS27523 --fill-missing
-    python save-cache.py /path/to/AS27523 --defaults-bundle --scripts-dir /path/to/scripts
 """
 
 import argparse
@@ -554,33 +553,6 @@ def build_summary(config_dir, subdir, config=None):
     print(msg)
 
 
-def build_defaults_bundle(config_dir, scripts_dir):
-    """将 scripts_dir/configure/defaults/ 下所有文件拼接成 config_dir/cache/defaults_bundle.txt"""
-    defaults_dir = os.path.join(scripts_dir, "configure", "defaults")
-    if not os.path.isdir(defaults_dir):
-        print(f"ERROR: defaults directory not found: {defaults_dir}")
-        sys.exit(1)
-
-    parts = []
-    count = 0
-    for root, _dirs, files in sorted(os.walk(defaults_dir)):
-        for fname in sorted(files):
-            fpath = os.path.join(root, fname)
-            with open(fpath, "r", encoding="utf-8") as f:
-                content = f.read()
-            parts.append(content)
-            if not content.endswith("\n"):
-                parts.append("\n")
-            count += 1
-
-    bundle = "".join(parts)
-    out = os.path.join(config_dir, "cache", "defaults_bundle.txt")
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(bundle)
-    print(f"  [BUNDLE] defaults_bundle.txt — {count} files, {len(bundle)} bytes")
-
-
 def update_arin_asset_members(config_dir, config):
     """
     Update ARIN AS-SET members with downstream ASNs if the API key is valid
@@ -728,31 +700,7 @@ def main():
         action="store_true",
         help="Only fetch data for missing cache files, don't overwrite existing",
     )
-    parser.add_argument(
-        "--defaults-bundle",
-        action="store_true",
-        help=(
-            "Build defaults_bundle.txt from scripts repo defaults/ directory "
-            "(only system/ defaults, e.g. the update-config scheduler)"
-        ),
-    )
-    parser.add_argument(
-        "--scripts-dir",
-        default=None,
-        help="Path to scripts repo (required with --defaults-bundle)",
-    )
     args = parser.parse_args()
-
-    # Handle --defaults-bundle mode (independent of PDB/bgpq4)
-    if args.defaults_bundle:
-        config_dir = os.path.abspath(args.config_dir)
-        scripts_dir = args.scripts_dir
-        if scripts_dir is None:
-            print("ERROR: --scripts-dir is required with --defaults-bundle")
-            sys.exit(1)
-        scripts_dir = os.path.abspath(scripts_dir)
-        build_defaults_bundle(config_dir, scripts_dir)
-        return
 
     config_dir = os.path.abspath(args.config_dir)
     config = load_config(config_dir)

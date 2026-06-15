@@ -11,7 +11,7 @@ def build_index_html(config, local_asn, base_url):
                   blacklist, router[].protocols.bgp/rpki, ...).
       local_asn — the local ASN, shown in the page title/header.
       base_url  — the worker base URL (https://host/{user}/{repo}); used to
-                  build per-router download links and the defaultconfig link.
+                  build per-router download links.
     Return: the complete HTML document as a single str.
 
     Pure function — reads config only, performs no I/O and mutates nothing.
@@ -147,11 +147,6 @@ def build_index_html(config, local_asn, base_url):
 
         p.append("</div>")
 
-    # Other resources
-    p.append("<h2>Other Resources</h2><ul>")
-    p.append(
-        f'<li><a href="{base_url}/router/defaultconfig.sh">defaultconfig.sh</a></li>'
-    )
-    p.append("</ul></body></html>")
+    p.append("</body></html>")
 
     return "\n".join(p)
