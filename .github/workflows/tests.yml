@@ -15,14 +15,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # bird2 provides the `bird` binary used by test_bird_config_parses
-      # (`bird -p` is parse-only). Same config grammar as the musl build that
-      # ships in the runtime container, so parsing results are identical.
-      - name: Install BIRD parser
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bird2
-          bird --version
+      # test_bird_config_parses parses the generated bird.conf with podman using
+      # our BIRD image (apt's bird2 has no BMP). podman ships on ubuntu runners;
+      # install only if missing. Override the image with BIRD_IMAGE if needed.
+      - name: Ensure podman is available
+        run: command -v podman || { sudo apt-get update && sudo apt-get install -y podman; }
 
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@v0.8.1

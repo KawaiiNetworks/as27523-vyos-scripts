@@ -1,4 +1,4 @@
-name: Docker
+name: Build BIRD Docker
 
 # Manual-only: pick bird2 or bird3 and publish to GHCR + Docker Hub
 # as kawaiinetworks/bird:<bird-version> for linux/amd64 + linux/arm64.

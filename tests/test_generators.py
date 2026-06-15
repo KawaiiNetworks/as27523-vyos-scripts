@@ -276,21 +276,38 @@ class GeneratorCoverageTest(unittest.TestCase):
     def test_bird_config_parses(self):
         """bird.conf must parse cleanly under the real BIRD parser.
 
-        Skipped when no `bird` binary is on PATH (e.g. run it under
-        `nix-shell -p bird2`). `bird -p` is parse-only; it returns non-zero on
-        any syntax/type error and 0 otherwise (warnings still allow 0).
+        Prefers a local `bird` binary on PATH; otherwise falls back to running
+        our BIRD image (which ships BMP) with podman. Skipped only when neither
+        a bird binary nor podman is available. `bird -p` is parse-only: it
+        returns non-zero on any syntax/type error and 0 otherwise (warnings
+        still allow 0).
+
+        Set BIRD_IMAGE to override the image used by the podman fallback
+        (default kawaiinetworks/bird:2).
         """
         bird_bin = shutil.which("bird") or shutil.which("bird2")
-        if not bird_bin:
-            self.skipTest("bird binary not on PATH")
+        podman_bin = shutil.which("podman")
+        if not bird_bin and not podman_bin:
+            self.skipTest("no bird binary or podman on PATH")
 
         out = self.generate_outputs()
-        conf_path = RESULTS_DIR / out["conf_name"]
-        proc = subprocess.run(
-            [bird_bin, "-p", "-c", str(conf_path)],
-            capture_output=True,
-            text=True,
-        )
+        conf_name = out["conf_name"]
+        conf_path = RESULTS_DIR / conf_name
+
+        if bird_bin:
+            cmd = [bird_bin, "-p", "-c", str(conf_path)]
+        else:
+            # Mount the results dir into the container and parse there. ',Z' is
+            # a no-op without SELinux, so this works on CI and SELinux hosts.
+            image = os.environ.get("BIRD_IMAGE", "kawaiinetworks/bird:2")
+            cmd = [
+                podman_bin, "run", "--rm",
+                "-v", f"{RESULTS_DIR}:/conf:ro,Z",
+                image,
+                "bird", "-p", "-c", f"/conf/{conf_name}",
+            ]
+
+        proc = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(
             proc.returncode, 0, msg=f"bird -p failed:\n{proc.stderr}{proc.stdout}"
         )
