@@ -54,7 +54,6 @@ function large_community_prepend_to_as(int times; int asn) -> lc { return (local
 # ---------------------------------------------------------------------------
 function check_blackhole() -> bool {
   if (65535, 666) ~ bgp_community then return true;
-  if (local_asn, 666) ~ bgp_community then return true;
   if (local_asn, 666, 0) ~ bgp_large_community then return true;
   return false;
 }
