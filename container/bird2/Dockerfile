@@ -1,21 +1,22 @@
-ARG ALPINE_VER=3.24
+ARG DEBIAN_VER=bookworm
 
 # ---- Build stage ----
-FROM alpine:${ALPINE_VER} AS builder
+FROM debian:${DEBIAN_VER}-slim AS builder
 
 ARG BIRD_VER=2.19.1
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
     automake \
     bison \
-    build-base \
+    build-essential \
+    ca-certificates \
     curl \
     flex \
-    linux-headers \
+    libncurses-dev \
+    libreadline-dev \
     m4 \
-    ncurses-dev \
-    readline-dev
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root
 
@@ -30,16 +31,17 @@ RUN cd bird-${BIRD_VER} && \
     make install
 
 # ---- Runtime stage ----
-FROM alpine:${ALPINE_VER}
+FROM debian:${DEBIAN_VER}-slim
 
 LABEL maintainer="Kawaii Networks <noc@projectk.org>"
 
 EXPOSE 179
 
-# Only the shared libraries BIRD links against at runtime.
-RUN apk add --no-cache \
-    ncurses-libs \
-    readline
+# Only the shared libraries BIRD links against at runtime (readline pulls tinfo).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libncurses6 \
+    libreadline8 \
+ && rm -rf /var/lib/apt/lists/*
 
 # bird daemon, birdc (readline client) and birdcl (standalone client).
 COPY --from=builder /usr/local/sbin/bird* /usr/local/sbin/
