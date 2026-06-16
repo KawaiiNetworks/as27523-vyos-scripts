@@ -216,6 +216,14 @@ protocol bgp {{ proto_base }} {
   neighbor range {{ neighbor._dyn.rng }} as {{ asn }};
   dynamic name "{{ proto_base }}_";
   dynamic name digits 2;
+{% if unnum or not neighbor.multihop %}
+  # On-link session. Must be explicit: iBGP defaults to multihop, which cannot
+  # resolve a route to a link-local (fe80::) neighbor, so the spawned dynamic
+  # sessions would never establish.
+  direct;
+{% else %}
+  multihop {{ neighbor.multihop }};
+{% endif %}
 {% if is_shutdown %}
   disabled;
 {% endif %}
