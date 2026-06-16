@@ -31,7 +31,14 @@ export async function githubRaw(
   repo: string,
   path: string,
 ): Promise<string | null> {
-  const url = `https://raw.githubusercontent.com/${user}/${repo}/main/${path}`;
+  // Always read fresh from GitHub. A unique query string makes each request a
+  // distinct URL, so Cloudflare's edge cache never serves a stale copy (GitHub
+  // raw sends Cache-Control: max-age=300). raw.githubusercontent.com ignores the
+  // extra param and serves the file. (The Workers runtime has no portable
+  // `cache: "no-store"`, so a cache-buster is the reliable bypass.)
+  const url =
+    `https://raw.githubusercontent.com/${user}/${repo}/main/${path}` +
+    `?nocache=${Date.now()}`;
   const resp = await fetch(url, {
     headers: new Headers(UA),
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
