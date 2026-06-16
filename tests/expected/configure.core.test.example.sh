@@ -14,8 +14,8 @@ echo 'start configure'
 configure
 
 # update-config scheduler: refresh and re-apply this router's config every 12h.
-if [ ! -d "/config/myapp" ]; then
-    sudo mkdir -p /config/myapp
+if [ ! -d "/config/myapp/bird" ]; then
+    sudo mkdir -p /config/myapp/bird
 fi
 
 sudo chown vyos -R /config/myapp
@@ -55,7 +55,7 @@ set service snmp v3 user vyos privacy encrypted-password encrypted
 set service snmp v3 user vyos privacy type aes
 set service snmp v3 view default oid 1
 delete container name bird
-set container name bird image 'kawaiinetworks/bird:2'
+set container name bird image 'kawaiinetworks/bird:3'
 set container name bird allow-host-networks
 set container name bird memory 0
 set container name bird capability 'net-admin'
@@ -76,7 +76,6 @@ commit
 # it, then swap it in atomically (mv = rename). A failed download OR a config
 # that does not parse must never clobber the working bird.conf — we only reload
 # BIRD once the new config is downloaded AND validated.
-mkdir -p /config/myapp/bird
 TMP_BIRD_CONF=$(mktemp /config/myapp/bird/.bird.conf.XXXXXX)
 if curl -sSfL -o "$TMP_BIRD_CONF" "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"; then
     # /config/myapp/bird is mounted into the container at /etc/bird, so the temp

@@ -1,8 +1,11 @@
 {# VyOS Container configuration for BIRD #}
 {# This template generates the commands to run BIRD in a high-privilege container #}
 
+{# Image is chosen by the router's `bird` option (see _bird_image): a bare
+   version like `bird: 3` -> kawaiinetworks/bird:3, a full ref is used verbatim,
+   absent -> kawaiinetworks/bird:2. #}
 delete container name bird
-set container name bird image '{{ bird_image | default("kawaiinetworks/bird:2") }}'
+set container name bird image '{{ bird_image }}'
 set container name bird allow-host-networks
 set container name bird memory 0
 set container name bird capability 'net-admin'

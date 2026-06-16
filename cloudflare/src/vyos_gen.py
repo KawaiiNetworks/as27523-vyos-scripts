@@ -417,6 +417,25 @@ def gen_snmp(cs, snmp_config, engineid):
     return template.render(snmp=snmp_config, engineid=engineid)
 
 
+def _bird_image(router_config):
+    """Resolve the BIRD container image from a router's optional `bird` option.
+
+    - absent            -> kawaiinetworks/bird:2 (default)
+    - a bare version    -> kawaiinetworks/bird:<n>   (e.g. bird: 3)
+    - a full image ref  -> used verbatim            (e.g. bird: "my/bird:123")
+
+    A bare version must be a plain integer tag; for a specific patch use a full
+    ref (e.g. "kawaiinetworks/bird:2.19.1").
+    """
+    val = router_config.get("bird")
+    if val is None:
+        return "kawaiinetworks/bird:2"
+    s = str(val).strip()
+    if s.isdigit():
+        return f"kawaiinetworks/bird:{s}"
+    return s
+
+
 def gen_container_bird(cs, router_config):
     """Render the VyOS commands that set up the BIRD container on the host.
 
@@ -426,7 +445,8 @@ def gen_container_bird(cs, router_config):
     template = env.get_template('container.j2')
     return template.render(
         cs=cs,
-        router_config=router_config
+        router_config=router_config,
+        bird_image=_bird_image(router_config),
     )
 
 def gen_bird_config(cs, router_config, router_id=None):
