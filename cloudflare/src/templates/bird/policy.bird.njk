@@ -7,21 +7,21 @@
 
 # AS Path Blacklist (Integer Set) — includes expanded blacklist as-set members
 define autogen_as_blacklist = [
-{% for asn in (cs.config.blacklist | default({}))['_expanded_asn'] | default([]) %}
+{% for asn in cs.config.blacklist['_expanded_asn'] | default([]) %}
   {{ asn }}{{ "," if not loop.last }}
 {% endfor %}
 ];
 
 # IPv4 Prefix Blacklist
 define autogen_prefix_blacklist = [
-{% for pfx in (cs.config.blacklist | default({})).prefix4 | default([]) %}
+{% for pfx in cs.config.blacklist.prefix4 | default([]) %}
   {{ pfx }}{{ "," if not loop.last }}
 {% endfor %}
 ];
 
 # IPv6 Prefix Blacklist
 define autogen_prefix6_blacklist = [
-{% for pfx in (cs.config.blacklist | default({})).prefix6 | default([]) %}
+{% for pfx in cs.config.blacklist.prefix6 | default([]) %}
   {{ pfx }}{{ "," if not loop.last }}
 {% endfor %}
 ];
@@ -47,8 +47,8 @@ define autogen_local_asn_prefix6 = [
 # Custom Defines (user-defined prefix-sets and as-sets)
 # ---------------------------------------------------------------------------
 
-{% if router_config.defines %}
-{% for name, pfxs in router_config.defines.get('prefix-sets', {}).items() %}
+{% if router_config.defines | default({}) | length %}
+{% for name, pfxs in router_config.defines['prefix-sets'] | default({}) %}
 define {{ name | lower | replace('-', '_') }} = [
 {% for pfx in pfxs %}
   {{ pfx }}{{ "," if not loop.last }}
@@ -56,7 +56,7 @@ define {{ name | lower | replace('-', '_') }} = [
 ];
 {% endfor %}
 
-{% for name, asns in router_config.defines.get('as-sets', {}).items() %}
+{% for name, asns in router_config.defines['as-sets'] | default({}) %}
 define {{ name | lower | replace('-', '_') }} = [
 {% for asn in asns %}
   {{ asn }}{{ "," if not loop.last }}

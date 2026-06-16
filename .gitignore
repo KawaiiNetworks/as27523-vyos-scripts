@@ -5,6 +5,7 @@ configure/outputs/
 !.pixi/config.toml
 __pycache__/
 *.pyc
-tests/results/
+cloudflare/tests/results/
 deprecated/
 tmp/
+node_modules/

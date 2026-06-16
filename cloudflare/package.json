@@ -1,0 +1,28 @@
+{
+  "name": "vyos-config-generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.5.0",
+    "ipaddr.js": "^2.2.0",
+    "js-yaml": "^4.1.0",
+    "nunjucks": "^3.2.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.3",
+    "@types/nunjucks": "^3.2.6",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5",
+    "wrangler": "^3.90.0"
+  }
+}

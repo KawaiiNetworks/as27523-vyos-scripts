@@ -13,13 +13,10 @@
 { if record_filtered then print "{{ tag }} ", {{ reason_var }}, " {{ ntype }} as{{ asn }} nid{{ nid }}{% if neighbor.description %} {{ neighbor.description | replace('"', "'") }}{% endif %}: ", net, " path ", bgp_path; reject; }
 {%- endmacro %}
 {% macro render_neighbor_filters(ntype, neighbor) %}
-{% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
+{% set asn = neighbor._asn %}
 {% set nid = neighbor.nid %}
-{% set tletter = {'Upstream': 'u', 'Peer': 'p', 'Downstream': 'd', 'RouteServer': 'r', 'IBGP': 'i'}[ntype] %}
-{% set vrf_pfx = ('vrf_' ~ neighbor['_vrf'].id ~ '_') if neighbor.get('_vrf') else '' %}
-{% set filter_prefix = "filter_" ~ vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
-{# IRR cone check applies to public Peer/Downstream without a manual prefix-list. #}
-{% set irr_cone = ntype in ['Peer', 'Downstream'] and neighbor['_asn_public'] and 'disable-IRR' not in neighbor and not neighbor.get('_has_prefix_list') %}
+{% set filter_prefix = neighbor._filter_prefix %}
+{% set irr_cone = neighbor._irr_cone %}
 {# One skeleton for every _in filter — only the contents vary, so the Jinja
    stays flat (no indent juggling; BIRD optimizes the constant branches):
      if (<extra-import-prefixes, or false>) then { }   # match => skip all filtering
@@ -28,32 +25,32 @@
    both still reach the attr region, where a blackhole is sent to discard. #}
 
 # ---------------------------------------------------------------------------
-# Filter: AS{{ asn }} ({{ ntype }}) - {{ neighbor.description | default('Session ' ~ nid) }}
+# Filter: AS{{ asn }} ({{ ntype }}) - {{ neighbor._desc_filter }}
 # ---------------------------------------------------------------------------
 filter {{ filter_prefix }}_in {
   bool blackhole_triggered = check_blackhole();
-{% if 'no-in-filter' not in neighbor and ntype != 'IBGP' %}
+{% if not neighbor._no_in_filter and ntype != 'IBGP' %}
   string ebgp_reject_reason = "";
 {% endif %}
   # pre import filter
 {% if neighbor['pre-import-filter'] %}
-{{ neighbor['pre-import-filter'] | trim | indent(2, first=True) }}
+{{ neighbor['pre-import-filter'] | trim | indent(2, true) }}
 {% endif %}
 
   # import filter
-  if ({% if neighbor['extra-import-prefixes'] %}{% for nm in neighbor['extra-import-prefixes'] %}{% if '/' in nm %}net ~ [ {{ nm }} ]{% else %}net ~ {{ nm | lower | replace('-', '_') }}{% endif %}{{ ' || ' if not loop.last }}{% endfor %}{% else %}false{% endif %}) then { }
+  if ({{ neighbor._extra_import_expr }}) then { }
   else {
 {% if irr_cone %}
     if net.type = NET_IP4 && !(net ~ autogen_as{{ asn }}_cone_prefix4) then {{ filtered_reject('irr-cone', ntype, asn, nid, neighbor) }}
     if net.type = NET_IP6 && !(net ~ autogen_as{{ asn }}_cone_prefix6) then {{ filtered_reject('irr-cone', ntype, asn, nid, neighbor) }}
 {% endif %}
-{% if neighbor.get('_has_prefix_list') %}
-{% if neighbor['_prefix4'] %}
+{% if neighbor['_has_prefix_list'] %}
+{% if neighbor['_prefix4'] | length %}
     if net.type = NET_IP4 && !(net ~ [ {{ neighbor['_prefix4'] | join(', ') }} ]) then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% else %}
     if net.type = NET_IP4 then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% endif %}
-{% if neighbor['_prefix6'] %}
+{% if neighbor['_prefix6'] | length %}
     if net.type = NET_IP6 && !(net ~ [ {{ neighbor['_prefix6'] | join(', ') }} ]) then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% else %}
     if net.type = NET_IP6 then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
@@ -63,7 +60,7 @@ filter {{ filter_prefix }}_in {
 {% if irr_cone %}
       if !autogen_as{{ asn }}_validate_path() then {{ filtered_reject('as-path', ntype, asn, nid, neighbor) }}
 {% endif %}
-{% if 'no-in-filter' not in neighbor %}
+{% if not neighbor._no_in_filter %}
 {% if ntype == 'IBGP' %}
       if !autogen_filter_ibgp() then {{ filtered_reject('ibgp', ntype, asn, nid, neighbor) }}
 {% else %}
@@ -79,12 +76,12 @@ filter {{ filter_prefix }}_in {
   }
   # post import filter
 {% if neighbor['post-import-filter'] %}
-{{ neighbor['post-import-filter'] | trim | indent(2, first=True) }}
+{{ neighbor['post-import-filter'] | trim | indent(2, true) }}
 {% endif %}
 
   # attr
   if blackhole_triggered then dest = RTD_BLACKHOLE;
-{% if 'no-in-filter' not in neighbor and neighbor['_asn_public'] %}
+{% if not neighbor._no_in_filter and neighbor['_asn_public'] %}
   autogen_{{ ntype | lower }}_attrs();
 {% endif %}
 {% if not neighbor['_asn_public'] %}
@@ -94,25 +91,23 @@ filter {{ filter_prefix }}_in {
 {% if neighbor['local-pref'] %}
   bgp_local_pref = {{ neighbor['local-pref'] }};
 {% endif %}
-{% if neighbor['metric'] %}
-{% set m = neighbor['metric'] | string %}
-{% if m.startswith('+') or m.startswith('-') %}
-{% set delta = m[1:] | int %}
+{% if neighbor._med %}
+{% if neighbor._med.mode == 'add' or neighbor._med.mode == 'sub' %}
   # Adjust relative to the current MED. The else covers neighbors where
   # autogen_*_attrs never ran (no-in-filter), so we fall back to default_med.
-{% if m.startswith('+') %}
-  if defined(bgp_med) then bgp_med = bgp_med + {{ delta }};
-  else bgp_med = default_med + {{ delta }};
+{% if neighbor._med.mode == 'add' %}
+  if defined(bgp_med) then bgp_med = bgp_med + {{ neighbor._med.value }};
+  else bgp_med = default_med + {{ neighbor._med.value }};
 {% else %}
-  if defined(bgp_med) then bgp_med = bgp_med - {{ delta }};
-  else bgp_med = default_med - {{ delta }};
+  if defined(bgp_med) then bgp_med = bgp_med - {{ neighbor._med.value }};
+  else bgp_med = default_med - {{ neighbor._med.value }};
 {% endif %}
 {% else %}
-  bgp_med = {{ m }};
+  bgp_med = {{ neighbor._med.value }};
 {% endif %}
 {% endif %}
-{% if neighbor['in-prepend'] %}
-{% for p_asn in neighbor['in-prepend'].split() %}
+{% if neighbor._in_prepend %}
+{% for p_asn in neighbor._in_prepend %}
   bgp_path.prepend({{ p_asn }});
 {% endfor %}
 {% endif %}
@@ -123,12 +118,12 @@ filter {{ filter_prefix }}_in {
 
   # pre import accept
 {% if neighbor['pre-import-accept'] %}
-{{ neighbor['pre-import-accept'] | indent(2, first=True) }}
+{{ neighbor['pre-import-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
 
-{% set is_simple = ntype == 'IBGP' and neighbor['simple-out'] %}
+{% set is_simple = neighbor._is_simple %}
 filter {{ filter_prefix }}_out {
   bool blackhole_triggered = check_blackhole();
 {% if ntype != 'IBGP' %}
@@ -158,7 +153,7 @@ filter {{ filter_prefix }}_out {
   # and dropped.
   if !blackhole_triggered then {
     ebgp_reject_reason = autogen_filter_ebgp();
-    if ebgp_reject_reason != "" then {{ filtered_reject_var('ebgp_reject_reason', ntype, asn, nid, neighbor, tag='EXPORT-FILTERED') }}
+    if ebgp_reject_reason != "" then {{ filtered_reject_var('ebgp_reject_reason', ntype, asn, nid, neighbor, 'EXPORT-FILTERED') }}
   }
 {% endif %}
 
@@ -172,8 +167,8 @@ filter {{ filter_prefix }}_out {
   # post export filter
 
   # attr
-{% if not is_simple and neighbor['out-prepend'] %}
-{% for p_asn in neighbor['out-prepend'].split() %}
+{% if not is_simple and neighbor._out_prepend %}
+{% for p_asn in neighbor._out_prepend %}
   bgp_path.prepend({{ p_asn }});
 {% endfor %}
 {% endif %}
@@ -182,46 +177,30 @@ filter {{ filter_prefix }}_out {
 {% endif %}
   # pre export accept
 {% if not is_simple and neighbor['pre-export-accept'] %}
-{{ neighbor['pre-export-accept'] | indent(2, first=True) }}
+{{ neighbor['pre-export-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
 {% endmacro %}
 
 {% macro render_neighbor_protocol(ntype, neighbor) %}
-{% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
+{% set asn = neighbor._asn %}
 {% set nid = neighbor.nid %}
-{% set tletter = {'Upstream': 'u', 'Peer': 'p', 'Downstream': 'd', 'RouteServer': 'r', 'IBGP': 'i'}[ntype] %}
-{% set vrf_pfx = ('vrf_' ~ neighbor['_vrf'].id ~ '_') if neighbor.get('_vrf') else '' %}
-{% set proto_base = vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
-{% set filter_prefix = "filter_" ~ vrf_pfx ~ tletter ~ "_as" ~ asn ~ "_nid" ~ nid %}
-{% set is_shutdown = (neighbor.shutdown or (asn in cs.bad_asn_set and asn not in cs.config.get('keepup-as-list', []))) %}
-{% set mp_in = cs.maximum_prefix_map.get(asn, [1, 1]) %}
-{% set mp_out = cs.maximum_prefix_map.get(cs.local_asn, [1, 1]) %}
-{% set af = neighbor['address-family'] %}
-{% set addrs = [neighbor['neighbor-address']] if neighbor['neighbor-address'] is string else neighbor['neighbor-address'] %}
-{% if neighbor.get('_unnumbered_iface') or neighbor.get('_range') %}
+{% set proto_base = neighbor._proto_base %}
+{% set filter_prefix = neighbor._filter_prefix %}
+{% set is_shutdown = neighbor._is_shutdown %}
+{% set mp_in = neighbor._mp_in %}
+{% set mp_out = neighbor._mp_out %}
+{% if neighbor._dyn %}
 {# Dynamic BGP. `_range` => listen for incoming peers in that prefix. An
    `_unnumbered_iface` => auto unnumbered: a per-neighbor RAdv discovers the
    peer's link-local into `unnumbered_<base>`, and the dynamic BGP peers over
    fe80::/64. Spawned sessions inherit the parent channels' filters. #}
-{% set unnum = neighbor.get('_unnumbered_iface') %}
-{% set rng = 'fe80::/64' if unnum else neighbor['_range'] %}
-{% set rng_v6 = ':' in rng %}
-{% if af %}
-{% set want4 = af.ipv4 | default(false) %}
-{% set want6 = af.ipv6 | default(false) %}
-{% elif unnum or neighbor['extended-nexthop'] %}
-{% set want4 = true %}
-{% set want6 = true %}
-{% else %}
-{% set want4 = not rng_v6 %}
-{% set want6 = rng_v6 %}
-{% endif %}
+{% set unnum = neighbor._dyn.unnum %}
 {% if unnum %}
 neighbor table unnumbered_{{ proto_base }};
 protocol radv radv_{{ proto_base }} {
-{% if neighbor.get('_vrf') %}
+{% if neighbor['_vrf'] %}
   vrf "{{ neighbor['_vrf'].name }}";
 {% endif %}
   neighbors { table unnumbered_{{ proto_base }}; };
@@ -229,12 +208,12 @@ protocol radv radv_{{ proto_base }} {
 }
 {% endif %}
 protocol bgp {{ proto_base }} {
-  description "{{ neighbor.description | default(ntype[:1].upper() ~ ': ' ~ cs.as_name_map.get(asn, 'AS' ~ (asn | string))) }}";
-{% if neighbor.get('_vrf') %}
+  description "{{ neighbor._desc_proto }}";
+{% if neighbor['_vrf'] %}
   vrf "{{ neighbor['_vrf'].name }}";
 {% endif %}
-  local as {% if neighbor['local-asn'] %}{{ neighbor['local-asn'] }}{% else %}{{ cs.local_asn }}{% endif %};
-  neighbor range {{ rng }} as {{ asn }};
+  local as {{ neighbor._local_as }};
+  neighbor range {{ neighbor._dyn.rng }} as {{ asn }};
   dynamic name "{{ proto_base }}_";
   dynamic name digits 2;
 {% if is_shutdown %}
@@ -247,14 +226,14 @@ protocol bgp {{ proto_base }} {
   password "{{ neighbor.password }}";
 {% endif %}
   graceful restart on;
-{% if want4 %}
+{% if neighbor._dyn.want4 %}
 
   ipv4 {
-{% if neighbor.get('_vrf') %}
+{% if neighbor['_vrf'] %}
     table vrf_{{ neighbor['_vrf'].id }}_v4;
 {% endif %}
     import filter {{ filter_prefix }}_in;
-{% if neighbor.get('keep-filtered', True) %}
+{% if neighbor._keep_filtered %}
     import keep filtered on;
 {% endif %}
 {% if neighbor['default-originate'] %}
@@ -263,7 +242,7 @@ protocol bgp {{ proto_base }} {
     export filter {{ filter_prefix }}_out;
 {% endif %}
     next hop self;
-{% if unnum or rng_v6 or neighbor['extended-nexthop'] %}
+{% if unnum or neighbor._dyn.rng_v6 or neighbor['extended-nexthop'] %}
     # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (session runs over IPv6).
     extended next hop;
 {% endif %}
@@ -278,14 +257,14 @@ protocol bgp {{ proto_base }} {
 {% endif %}
   };
 {% endif %}
-{% if want6 %}
+{% if neighbor._dyn.want6 %}
 
   ipv6 {
-{% if neighbor.get('_vrf') %}
+{% if neighbor['_vrf'] %}
     table vrf_{{ neighbor['_vrf'].id }}_v6;
 {% endif %}
     import filter {{ filter_prefix }}_in;
-{% if neighbor.get('keep-filtered', True) %}
+{% if neighbor._keep_filtered %}
     import keep filtered on;
 {% endif %}
 {% if neighbor['default-originate'] %}
@@ -317,33 +296,16 @@ protocol bgp {{ proto_base }} {
    Naming: <base>_v4 / <base>_v6; an extra _N is appended only when one family
    has more than one address (e.g. two v4 peers -> _v4_1, _v4_2). Splitting per
    address also guarantees source-address family always matches its channel. #}
-{% set fam_total = namespace(v4=0, v6=0) %}
-{% for a in addrs %}{% if ':' in (a | string) %}{% set fam_total.v6 = fam_total.v6 + 1 %}{% else %}{% set fam_total.v4 = fam_total.v4 + 1 %}{% endif %}{% endfor %}
-{% set fam_idx = namespace(v4=0, v6=0) %}
-{% for addr in addrs %}
-{% set is_v6 = ':' in (addr | string) %}
-{% set fam = 'v6' if is_v6 else 'v4' %}
-{% if is_v6 %}{% set fam_idx.v6 = fam_idx.v6 + 1 %}{% set idx = fam_idx.v6 %}{% set fam_count = fam_total.v6 %}{% else %}{% set fam_idx.v4 = fam_idx.v4 + 1 %}{% set idx = fam_idx.v4 %}{% set fam_count = fam_total.v4 %}{% endif %}
-{% set proto_name = proto_base ~ '_' ~ fam ~ (('_' ~ idx) if fam_count > 1 else '') %}
-{% if af %}
-{% set want4 = af.ipv4 | default(false) %}
-{% set want6 = af.ipv6 | default(false) %}
-{% elif neighbor['extended-nexthop'] %}
-{% set want4 = true %}
-{% set want6 = true %}
-{% else %}
-{% set want4 = not is_v6 %}
-{% set want6 = is_v6 %}
-{% endif %}
+{% for ap in neighbor._addr_protos %}
 
-protocol bgp {{ proto_name }} {
-  description "{{ neighbor.description | default(ntype[:1].upper() ~ ': ' ~ cs.as_name_map.get(asn, 'AS' ~ (asn | string))) }}";
-{% if neighbor.get('_vrf') %}
+protocol bgp {{ ap.proto_name }} {
+  description "{{ neighbor._desc_proto }}";
+{% if neighbor['_vrf'] %}
   vrf "{{ neighbor['_vrf'].name }}";
 {% endif %}
-  local as {% if neighbor['local-asn'] %}{{ neighbor['local-asn'] }}{% else %}{{ cs.local_asn }}{% endif %};
-  neighbor {{ addr }} as {{ asn }};
-{% if neighbor['_source_address'] and ((neighbor['_source_family'] == 6) == is_v6) %}
+  local as {{ neighbor._local_as }};
+  neighbor {{ ap.addr }} as {{ asn }};
+{% if ap.src_match %}
   source address {{ neighbor['_source_address'] }};
 {% endif %}
 {% if is_shutdown %}
@@ -367,14 +329,14 @@ protocol bgp {{ proto_name }} {
   keepalive time {{ neighbor.keepalive }};
 {% endif %}
   graceful restart on;
-{% if want4 %}
+{% if ap.want4 %}
 
   ipv4 {
-{% if neighbor.get('_vrf') %}
+{% if neighbor['_vrf'] %}
     table vrf_{{ neighbor['_vrf'].id }}_v4;
 {% endif %}
     import filter {{ filter_prefix }}_in;
-{% if neighbor.get('keep-filtered', True) %}
+{% if neighbor._keep_filtered %}
     import keep filtered on;
 {% endif %}
 {% if neighbor['default-originate'] %}
@@ -399,14 +361,14 @@ protocol bgp {{ proto_name }} {
 {% endif %}
   };
 {% endif %}
-{% if want6 %}
+{% if ap.want6 %}
 
   ipv6 {
-{% if neighbor.get('_vrf') %}
+{% if neighbor['_vrf'] %}
     table vrf_{{ neighbor['_vrf'].id }}_v6;
 {% endif %}
     import filter {{ filter_prefix }}_in;
-{% if neighbor.get('keep-filtered', True) %}
+{% if neighbor._keep_filtered %}
     import keep filtered on;
 {% endif %}
 {% if neighbor['default-originate'] %}

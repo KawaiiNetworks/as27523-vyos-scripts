@@ -11,20 +11,34 @@ jobs:
   test:
     name: Run generator tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # test_bird_config_parses parses the generated bird.conf with podman using
-      # our BIRD image (apt's bird2 has no BMP). podman ships on ubuntu runners;
-      # install only if missing. Override the image with BIRD_IMAGE if needed.
+      # The bird -p parse check (tests/extra.test.ts) parses the generated
+      # bird.conf with podman using our BIRD image (apt's bird2 has no BMP).
+      # podman ships on ubuntu runners; install if missing, then pre-pull the
+      # image so the test runs instead of skipping.
       - name: Ensure podman is available
         run: command -v podman || { sudo apt-get update && sudo apt-get install -y podman; }
+      - name: Pull BIRD image
+        run: podman pull kawaiinetworks/bird:3
 
-      - name: Setup pixi
-        uses: prefix-dev/setup-pixi@v0.8.1
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          cache: true
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Run tests
-        run: pixi run test
+        run: npm test

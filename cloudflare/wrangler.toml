@@ -1,17 +1,13 @@
 name = "vyos-config-generator"
-main = "src/entry.py"
+main = "src/index.ts"
 compatibility_date = "2024-12-01"
-compatibility_flags = ["python_workers"]
+# nodejs_compat satisfies stray node-builtin references pulled in by nunjucks;
+# the Worker itself uses a custom in-memory template loader (no fs access).
+compatibility_flags = ["nodejs_compat"]
 
-# Bundle the BIRD/VyOS jinja2 templates (.j2), BIRD default snippets (.bird) and
-# the birds helper as data modules so they can be read() at runtime.
-# (birds.py is matched as Data here so find_additional_modules does not treat it
-# as an importable Python module.)
-base_dir = "src"
-find_additional_modules = true
-
+# Bundle the BIRD/VyOS Nunjucks templates (.njk), BIRD default snippets (.bird)
+# and the birds helper as Text modules so they import as strings at build time.
 [[rules]]
-type = "Data"
-globs = ["**/*.j2", "**/*.bird", "**/birds.py"]
+type = "Text"
+globs = ["**/*.njk", "**/*.bird", "**/birds.py"]
 fallthrough = true
-

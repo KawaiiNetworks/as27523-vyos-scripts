@@ -6,7 +6,7 @@ roa4 table t_roa4;
 roa6 table t_roa6;
 
 # RPKI RTR Protocol Instances
-{% if rpki_servers %}
+{% if rpki_servers | length %}
 {% for server in rpki_servers %}
 protocol rpki rpki_{{ loop.index }} {
   remote "{{ server.server }}" port {{ server.port }};

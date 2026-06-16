@@ -17,22 +17,22 @@ ipv6 table vrf_{{ vid }}_v6;
 
 filter filter_direct_vrf_{{ vid }}_import_v4 {
   # Base: whitelist = local-asn prefixes + extra-import-prefixes
-  if !(net ~ autogen_local_asn_prefix4{% for pfx in vdirect['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
-{% if vdirect.get('pre-import-accept') %}
+  if !(net ~ autogen_local_asn_prefix4{{ vdirect._extra_suffix }}) then reject;
+{% if vdirect['pre-import-accept'] %}
 
   # ── pre-import-accept hook ──
-{{ vdirect['pre-import-accept'] | indent(2, first=True) }}
+{{ vdirect['pre-import-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
 
 filter filter_direct_vrf_{{ vid }}_import_v6 {
   # Base: whitelist = local-asn prefixes + extra-import-prefixes
-  if !(net ~ autogen_local_asn_prefix6{% for pfx in vdirect['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
-{% if vdirect.get('pre-import-accept') %}
+  if !(net ~ autogen_local_asn_prefix6{{ vdirect._extra_suffix }}) then reject;
+{% if vdirect['pre-import-accept'] %}
 
   # ── pre-import-accept hook ──
-{{ vdirect['pre-import-accept'] | indent(2, first=True) }}
+{{ vdirect['pre-import-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
@@ -52,8 +52,8 @@ protocol kernel kernel_vrf_{{ vid }}_v4 {
     export filter {
       # Never install the synthetic default route into the host FIB.
       if large_community_default_route ~ bgp_large_community then reject;
-{% if vkernel.get('ipv4') and vkernel['ipv4'].get('pre-export-accept') %}
-{{ vkernel['ipv4']['pre-export-accept'] | indent(6, first=True) }}
+{% if vkernel['ipv4'] and vkernel['ipv4']['pre-export-accept'] %}
+{{ vkernel['ipv4']['pre-export-accept'] | indent(6, true) }}
 {% endif %}
       accept;
     };
@@ -71,8 +71,8 @@ protocol kernel kernel_vrf_{{ vid }}_v6 {
     export filter {
       # Never install the synthetic default route into the host FIB.
       if large_community_default_route ~ bgp_large_community then reject;
-{% if vkernel.get('ipv6') and vkernel['ipv6'].get('pre-export-accept') %}
-{{ vkernel['ipv6']['pre-export-accept'] | indent(6, first=True) }}
+{% if vkernel['ipv6'] and vkernel['ipv6']['pre-export-accept'] %}
+{{ vkernel['ipv6']['pre-export-accept'] | indent(6, true) }}
 {% endif %}
       accept;
     };
@@ -91,6 +91,6 @@ protocol static static_vrf_{{ vid }}_v6 {
   route ::/0 unreachable { preference = 0; bgp_large_community.add(large_community_default_route); };
 }
 {% endmacro %}
-{% for vname, vcfg in (router_config.vrf or {}).items() %}
-{{ render_vrf(vname, vname | lower | replace('-', '_'), vcfg.table, (vcfg.get('protocols', {}) or {}).get('direct', {}) or {}, (vcfg.get('protocols', {}) or {}).get('kernel', {}) or {}) }}
+{% for vname, vcfg in router_config.vrf | default({}) %}
+{{ render_vrf(vname, vname | lower | replace('-', '_'), vcfg.table, vcfg['protocols']['direct'] | default({}), vcfg['protocols']['kernel'] | default({})) }}
 {% endfor %}

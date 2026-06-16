@@ -2,7 +2,7 @@
 # Generated for AS{{ local_asn }}
 # Router ID: {{ router_id }}
 
-{% if cs.warnings %}
+{% if cs.warnings | length %}
 # WARNINGS / SKIPPED ITEMS
 {% for w in cs.warnings %}
 #   - {{ w }}
@@ -21,7 +21,7 @@ define local_asn = {{ cs.local_asn }};
 # (reason, session, prefix, as-path) just before dropping them. Toggle here and
 # reload to turn the logging on/off without regenerating; defaults on (router
 # config key `record-filtered: false` flips the generated default).
-define record_filtered = {{ 'true' if router_config.get('record-filtered', True) else 'false' }};
+define record_filtered = {{ 'true' if router_config._record_filtered else 'false' }};
 
 # Load defaults and policy lists (merged during generation)
 # NOTE: BIRD requires define-before-use. The dynamic policy defines
@@ -30,16 +30,16 @@ define record_filtered = {{ 'true' if router_config.get('record-filtered', True)
 {% include "defaults/prefix_lists.bird" %}
 {% include "defaults/as_paths.bird" %}
 {% include "defaults/communities.bird" %}
-{% include "policy.bird.j2" %}
-{% include "rpki.bird.j2" %}
+{% include "policy.bird.njk" %}
+{% include "rpki.bird.njk" %}
 {% include "defaults/filters.bird" %}
 
 # Per-AS filtering data and per-neighbor filters / protocols
-{% include "as_filters.bird.j2" %}
+{% include "as_filters.bird.njk" %}
 
 # VRF tables/protocols — BEFORE neighbors so VRF BGP channels can reference the tables
-{% include "vrf.bird.j2" %}
-{% include "neighbors.bird.j2" %}
+{% include "vrf.bird.njk" %}
+{% include "neighbors.bird.njk" %}
 
 # ============================================================================
 # Redistribution and Kernel Protocols
@@ -54,22 +54,22 @@ define record_filtered = {{ 'true' if router_config.get('record-filtered', True)
 # Direct protocol import filters (which local routes enter BIRD and can be advertised via BGP)
 filter filter_direct_import_v4 {
   # Base: whitelist = local-asn prefixes + extra-import-prefixes
-  if !(net ~ autogen_local_asn_prefix4{% for pfx in direct['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
-{% if direct.get('pre-import-accept') %}
+  if !(net ~ autogen_local_asn_prefix4{{ direct._extra_suffix }}) then reject;
+{% if direct['pre-import-accept'] %}
 
   # ── pre-import-accept hook ──
-{{ direct['pre-import-accept'] | indent(2, first=True) }}
+{{ direct['pre-import-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
 
 filter filter_direct_import_v6 {
   # Base: whitelist = local-asn prefixes + extra-import-prefixes
-  if !(net ~ autogen_local_asn_prefix6{% for pfx in direct['extra-import-prefixes']|default([]) %} || {% if '/' in pfx %}net ~ [ {{ pfx }} ]{% else %}net ~ {{ pfx|lower|replace('-','_') }}{% endif %}{% endfor %}) then reject;
-{% if direct.get('pre-import-accept') %}
+  if !(net ~ autogen_local_asn_prefix6{{ direct._extra_suffix }}) then reject;
+{% if direct['pre-import-accept'] %}
 
   # ── pre-import-accept hook ──
-{{ direct['pre-import-accept'] | indent(2, first=True) }}
+{{ direct['pre-import-accept'] | indent(2, true) }}
 {% endif %}
   accept;
 }
@@ -91,8 +91,8 @@ protocol kernel {
       # Never install the synthetic default route into the host FIB; a real
       # learned default has no marker and is installed normally.
       if large_community_default_route ~ bgp_large_community then reject;
-{% if kernel.get('ipv4') and kernel['ipv4'].get('pre-export-accept') %}
-{{ kernel['ipv4']['pre-export-accept'] | indent(6, first=True) }}
+{% if kernel['ipv4'] and kernel['ipv4']['pre-export-accept'] %}
+{{ kernel['ipv4']['pre-export-accept'] | indent(6, true) }}
 {% endif %}
       accept;
     };
@@ -108,8 +108,8 @@ protocol kernel {
       # Never install the synthetic default route into the host FIB; a real
       # learned default has no marker and is installed normally.
       if large_community_default_route ~ bgp_large_community then reject;
-{% if kernel.get('ipv6') and kernel['ipv6'].get('pre-export-accept') %}
-{{ kernel['ipv6']['pre-export-accept'] | indent(6, first=True) }}
+{% if kernel['ipv6'] and kernel['ipv6']['pre-export-accept'] %}
+{{ kernel['ipv6']['pre-export-accept'] | indent(6, true) }}
 {% endif %}
       accept;
     };
@@ -140,7 +140,7 @@ protocol static {
 
 # BMP Configuration
 # Used for monitoring BGP sessions.
-{% if router_config.service and router_config.service.bmp %}
+{% if router_config.service and router_config.service.bmp | length %}
 {% for target in router_config.service.bmp %}
 protocol bmp bmp_{{ loop.index }} {
   station address ip {{ target.address }} port {{ target.port }};
