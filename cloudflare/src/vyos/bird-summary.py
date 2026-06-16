@@ -168,6 +168,27 @@ def _name_sort_key(name):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
 
 
+# Order of BGP neighbour types, keyed by the type letter that prefixes the
+# protocol name (e.g. 'u_as12345_nid1_v4', or 'vrf_3_u_as...' inside a VRF):
+# IBGP, Upstream, RouteServer, Peer, Downstream.
+BGP_TYPE_ORDER = {"i": 0, "u": 1, "r": 2, "p": 3, "d": 4}
+
+
+def _sort_key(p):
+    """Sort by Proto (bgp always last), then by Name.
+
+    Within bgp, group by neighbour-type letter (i < u < r < p < d) first.
+    """
+    proto = p["Proto"].lower()
+    is_bgp = proto == "bgp"
+    bgp_type = 99
+    if is_bgp:
+        m = re.match(r"(?:vrf_\d+_)?([a-z])_as", p["Name"])
+        if m:
+            bgp_type = BGP_TYPE_ORDER.get(m.group(1), 98)
+    return (1 if is_bgp else 0, proto, bgp_type, _name_sort_key(p["Name"]))
+
+
 def _state_color(state):
     """BIRD-style colour for a protocol state."""
     state = state.lower()
@@ -187,7 +208,7 @@ def generate_table_text(protocols, use_color):
     if not protocols:
         return "No protocols found.\n"
 
-    protocols = sorted(protocols, key=lambda p: _name_sort_key(p["Name"]))
+    protocols = sorted(protocols, key=_sort_key)
 
     cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info",
             "Uptime", "Exported", "Imported", "Filtered"]

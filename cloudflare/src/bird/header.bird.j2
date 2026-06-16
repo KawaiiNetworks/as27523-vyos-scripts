@@ -11,6 +11,11 @@
 log "/etc/bird/bird.log" all;
 router id {{ router_id }};
 define local_asn = {{ cs.local_asn }};
+# When true, each neighbor import filter logs the routes it rejects (reason,
+# session, prefix, as-path) just before dropping them. Toggle here and reload to
+# turn the logging on/off without regenerating; defaults on (router config key
+# `record-import-filtered: false` flips the generated default).
+define record_import_filtered = {{ 'true' if router_config.get('record-import-filtered', True) else 'false' }};
 
 # Load defaults and policy lists (merged during generation)
 # NOTE: BIRD requires define-before-use. The dynamic policy defines

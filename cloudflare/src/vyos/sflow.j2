@@ -8,6 +8,7 @@ set system sflow interface {{ iface }}
 {% endfor %}
 {% if sflow['vpp-interface'] %}
 set system sflow vpp
+delete vpp sflow interface
 {% for iface in sflow['vpp-interface'] %}
 set vpp sflow interface {{ iface }}
 set system sflow interface {{ iface }}

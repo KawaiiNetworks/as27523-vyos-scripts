@@ -1,5 +1,11 @@
 # neighbors.bird.j2
 # Per-session BGP inbound/outbound filters and protocol instances.
+{# A reject that, when record_import_filtered is on, logs the dropped route
+   (reason + session identity + prefix + as-path) before discarding it. Emitted
+   inline after `then`, so it expands to a `{ ...; reject; }` block. #}
+{% macro filtered_reject(reason, ntype, asn, nid, neighbor) -%}
+{ if record_import_filtered then print "IMPORT-FILTERED {{ reason }} {{ ntype }} as{{ asn }} nid{{ nid }}{% if neighbor.description %} {{ neighbor.description | replace('"', "'") }}{% endif %}: ", net, " path ", bgp_path; reject; }
+{%- endmacro %}
 {% macro render_neighbor_filters(ntype, neighbor) %}
 {% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
 {% set nid = neighbor.nid %}
@@ -26,32 +32,32 @@ filter {{ filter_prefix }}_in {
   if ({% if neighbor['extra-import-prefixes'] %}{% for nm in neighbor['extra-import-prefixes'] %}{% if '/' in nm %}net ~ [ {{ nm }} ]{% else %}net ~ {{ nm | lower | replace('-', '_') }}{% endif %}{{ ' || ' if not loop.last }}{% endfor %}{% else %}false{% endif %}) then { }
   else {
 {% if irr_cone %}
-    if net.type = NET_IP4 && !(net ~ autogen_as{{ asn }}_cone_prefix4) then reject;
-    if net.type = NET_IP6 && !(net ~ autogen_as{{ asn }}_cone_prefix6) then reject;
+    if net.type = NET_IP4 && !(net ~ autogen_as{{ asn }}_cone_prefix4) then {{ filtered_reject('irr-cone', ntype, asn, nid, neighbor) }}
+    if net.type = NET_IP6 && !(net ~ autogen_as{{ asn }}_cone_prefix6) then {{ filtered_reject('irr-cone', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% if neighbor.get('_has_prefix_list') %}
 {% if neighbor['_prefix4'] %}
-    if net.type = NET_IP4 && !(net ~ [ {{ neighbor['_prefix4'] | join(', ') }} ]) then reject;
+    if net.type = NET_IP4 && !(net ~ [ {{ neighbor['_prefix4'] | join(', ') }} ]) then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% else %}
-    if net.type = NET_IP4 then reject;
+    if net.type = NET_IP4 then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% if neighbor['_prefix6'] %}
-    if net.type = NET_IP6 && !(net ~ [ {{ neighbor['_prefix6'] | join(', ') }} ]) then reject;
+    if net.type = NET_IP6 && !(net ~ [ {{ neighbor['_prefix6'] | join(', ') }} ]) then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% else %}
-    if net.type = NET_IP6 then reject;
+    if net.type = NET_IP6 then {{ filtered_reject('prefix-list', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% endif %}
     if !blackhole_triggered then {
 {% if irr_cone %}
-      if !autogen_as{{ asn }}_validate_path() then reject;
+      if !autogen_as{{ asn }}_validate_path() then {{ filtered_reject('as-path', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% if 'no-in-filter' not in neighbor %}
 {% if neighbor['_asn_public'] %}
-      if !{{ 'autogen_filter_ibgp()' if ntype == 'IBGP' else 'autogen_filter_ebgp()' }} then reject;
+      if !{{ 'autogen_filter_ibgp()' if ntype == 'IBGP' else 'autogen_filter_ebgp()' }} then {{ filtered_reject('ibgp' if ntype == 'IBGP' else 'ebgp', ntype, asn, nid, neighbor) }}
 {% else %}
       # private ASN: its private ASNs are stripped from the as-path in the
       # attr section below.
-      if !autogen_filter_ebgp() then reject;
+      if !autogen_filter_ebgp() then {{ filtered_reject('ebgp', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% endif %}
     }
