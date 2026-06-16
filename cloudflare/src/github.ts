@@ -31,18 +31,25 @@ export async function githubRaw(
   repo: string,
   path: string,
 ): Promise<string | null> {
-  // Always read fresh from GitHub. A unique query string makes each request a
-  // distinct URL, so Cloudflare's edge cache never serves a stale copy (GitHub
-  // raw sends Cache-Control: max-age=300). raw.githubusercontent.com ignores the
-  // extra param and serves the file. (The Workers runtime has no portable
-  // `cache: "no-store"`, so a cache-buster is the reliable bypass.)
+  // Always read fresh from GitHub. Two caches sit between us and the file:
+  //   1. Cloudflare's subrequest cache. A Worker fetch() caches by URL, honoring
+  //      GitHub raw's `Cache-Control: max-age=300` — this is what served stale
+  //      configs. `cache: "no-store"` makes the runtime skip that cache entirely
+  //      (for origins not on Cloudflare it bypasses Cloudflare's cache and also
+  //      forwards `Cache-Control: no-cache` upstream). Supported since compat
+  //      date 2024-11-11; ours is 2024-12-01, so no extra flag is needed.
+  //   2. GitHub raw's own CDN (Fastly). The unique query string is a best-effort
+  //      bust for that layer, varying the origin cache key when it's honored.
   const url =
     `https://raw.githubusercontent.com/${user}/${repo}/main/${path}` +
     `?nocache=${Date.now()}`;
   const resp = await fetch(url, {
+    // Honored at runtime (compat date 2024-12-01 ≥ 2024-11-11); the intersection
+    // cast is only because this @cloudflare/workers-types version omits `cache`.
+    cache: "no-store",
     headers: new Headers(UA),
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-  });
+  } as RequestInit & { cache: "no-store" });
   if (resp.status !== 200) return null;
   return await resp.text();
 }

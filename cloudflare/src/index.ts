@@ -17,7 +17,12 @@ import { buildIndexHtml } from "./indexPage.js";
 import birdsScript from "./templates/vyos/birds.py";
 
 function text(body: string, status = 200, contentType = "text/plain"): Response {
-  return new Response(body, { status, headers: { "content-type": contentType } });
+  // Every response is generated fresh from the current GitHub state, so no layer
+  // (browser, or a zone "Cache Everything" rule) should hold onto it.
+  return new Response(body, {
+    status,
+    headers: { "content-type": contentType, "cache-control": "no-store" },
+  });
 }
 
 export default {
