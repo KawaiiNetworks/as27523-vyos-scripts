@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "precompile": "node scripts/precompile-templates.mjs",
+    "pretest": "npm run precompile",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretypecheck": "npm run precompile",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"

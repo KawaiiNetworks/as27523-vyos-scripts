@@ -1,15 +1,14 @@
 import { defineConfig } from "vitest/config";
 import fs from "node:fs";
 
-// Load .njk/.bird/.py template files as string default-exports, mirroring the
-// wrangler `Text` rule used in the deployed Worker. This lets the same
-// `import header from "./templates/bird/header.bird.njk"` work under vitest.
+// Load the birds.py helper as a string default-export (mirrors the wrangler
+// Text rule). Templates are precompiled separately and don't go through here.
 function rawText() {
   return {
     name: "raw-text-templates",
     load(id: string) {
       const clean = id.split("?")[0];
-      if (clean.endsWith(".njk") || clean.endsWith(".bird") || clean.endsWith(".py")) {
+      if (clean.endsWith(".py")) {
         const src = fs.readFileSync(clean, "utf8");
         return `export default ${JSON.stringify(src)};`;
       }

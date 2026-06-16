@@ -6,6 +6,7 @@ configure/outputs/
 __pycache__/
 *.pyc
 cloudflare/tests/results/
+cloudflare/src/templates.generated.ts
 deprecated/
 tmp/
 node_modules/

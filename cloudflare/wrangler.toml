@@ -2,12 +2,17 @@ name = "vyos-config-generator"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 # nodejs_compat satisfies stray node-builtin references pulled in by nunjucks;
-# the Worker itself uses a custom in-memory template loader (no fs access).
+# the Worker itself uses precompiled templates (no fs access, no eval).
 compatibility_flags = ["nodejs_compat"]
 
-# Bundle the BIRD/VyOS Nunjucks templates (.njk), BIRD default snippets (.bird)
-# and the birds helper as Text modules so they import as strings at build time.
+# Precompile the Nunjucks templates to JS before bundling (the Workers runtime
+# forbids eval/new Function, so templates can't be compiled from strings at
+# runtime). Generates src/templates.generated.ts.
+[build]
+command = "node scripts/precompile-templates.mjs"
+
+# The birds helper is imported as a Text module (served verbatim).
 [[rules]]
 type = "Text"
-globs = ["**/*.njk", "**/*.bird", "**/birds.py"]
+globs = ["**/birds.py"]
 fallthrough = true
