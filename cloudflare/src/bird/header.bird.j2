@@ -8,7 +8,13 @@
 #   - {{ w }}
 {% endfor %}
 {% endif %}
+{% if bird_major >= 3 %}
+# Fixed-size circular logfile (BIRD 3+): a 50 MB ring buffer, so detailed tracing
+# can stay on without ever overfilling the disk (and it's the fastest log mode).
+log fixed "/etc/bird/bird.log" 50000000 all;
+{% else %}
 log "/etc/bird/bird.log" all;
+{% endif %}
 router id {{ router_id }};
 define local_asn = {{ cs.local_asn }};
 # When true, each neighbor import/export filter logs the routes it rejects

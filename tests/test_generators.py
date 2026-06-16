@@ -293,8 +293,9 @@ class GeneratorCoverageTest(unittest.TestCase):
         returns non-zero on any syntax/type error and 0 otherwise (warnings
         still allow 0).
 
-        Set BIRD_IMAGE to override the image used by the podman fallback
-        (default kawaiinetworks/bird:2).
+        The podman fallback uses the image the router's `bird` option resolves
+        to (so a BIRD 3 conf is parsed by a BIRD 3 image, matching `log fixed`
+        and other version-specific syntax). Set BIRD_IMAGE to override it.
         """
         bird_bin = shutil.which("bird") or shutil.which("bird2")
         podman_bin = shutil.which("podman")
@@ -311,7 +312,8 @@ class GeneratorCoverageTest(unittest.TestCase):
             # Mount the results dir into the container and parse there. ',Z' is
             # a no-op without SELinux, so this works on CI and SELinux hosts.
             # The image's ENTRYPOINT is `bird`, so pass only its arguments.
-            image = os.environ.get("BIRD_IMAGE", "kawaiinetworks/bird:2")
+            router = build_config()["router"][0]
+            image = os.environ.get("BIRD_IMAGE", self.bird._bird_image(router))
             cmd = [
                 podman_bin, "run", "--rm",
                 "-v", f"{RESULTS_DIR}:/conf:ro,Z",

@@ -436,6 +436,19 @@ def _bird_image(router_config):
     return s
 
 
+def _bird_major(router_config):
+    """Best-effort BIRD major version (an int) from the `bird` option, used to
+    pick version-specific config syntax (e.g. BIRD 3's `log fixed` ring buffer).
+
+    Parses the leading integer of the resolved image tag, so a bare `bird: 3`,
+    the default `:2`, and a full ref like `:2.19.1` all map correctly. Defaults
+    to 2 when no tag/number can be found.
+    """
+    tag = _bird_image(router_config).rsplit(":", 1)[-1]
+    m = re.match(r"\d+", tag)
+    return int(m.group()) if m else 2
+
+
 def gen_container_bird(cs, router_config):
     """Render the VyOS commands that set up the BIRD container on the host.
 
@@ -466,6 +479,7 @@ def gen_bird_config(cs, router_config, router_id=None):
         router_config=router_config,
         router_id=router_id or router_config.get("router-id"),
         local_asn=cs.local_asn,
+        bird_major=_bird_major(router_config),
         rpki_servers=router_config.get("protocols", {}).get("rpki", []),
     )
 
