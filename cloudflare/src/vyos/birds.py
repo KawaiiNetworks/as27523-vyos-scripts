@@ -137,7 +137,6 @@ def parse_bird_output(lines):
                     "Uptime": calculate_uptime(since),
                     "Exported": "-",
                     "Imported": "-",
-                    "ImportLimit": "-",
                     "Filtered": "-",
                 }
         else:
@@ -150,8 +149,6 @@ def parse_bird_output(lines):
                 current_proto["NeighborIP"] = line_stripped.split(":", 1)[1].strip()
             elif line_stripped.startswith("Last error:"):
                 current_proto["Last error"] = line_stripped.split(":", 1)[1].strip()
-            elif line_stripped.startswith("Import limit:"):
-                current_proto["ImportLimit"] = line_stripped.split(":", 1)[1].strip()
             # Multi-channel protocols show '---' in the Table column; pull the
             # real table name from the first channel detail line instead.
             elif line_stripped.startswith("Table:") and current_proto["VRF"] == "---":
@@ -223,13 +220,8 @@ def generate_table_text(protocols, use_color):
 
     protocols = sorted(protocols, key=_sort_key)
 
-    # Combine imported count and import limit into one cell, e.g. '155/1000'
-    # (or '155/-' when the channel has no import limit).
-    for p in protocols:
-        p["Import/Limit"] = f"{p['Imported']}/{p['ImportLimit']}" if p["Imported"] != "-" else "-"
-
     cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info", "Last error",
-            "Uptime", "Import/Limit", "Exported", "Filtered"]
+            "Uptime", "Imported", "Exported", "Filtered"]
 
     widths = {col: len(col) for col in cols}
     widths["NeighborIP"] = max(widths["NeighborIP"], 15)
