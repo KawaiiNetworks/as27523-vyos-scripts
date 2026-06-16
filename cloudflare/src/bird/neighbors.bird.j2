@@ -36,6 +36,9 @@ filter {{ filter_prefix }}_in {
   string ebgp_reject_reason = "";
 {% endif %}
   # pre import filter
+{% if neighbor['pre-import-filter'] %}
+{{ neighbor['pre-import-filter'] | trim | indent(2, first=True) }}
+{% endif %}
 
   # import filter
   if ({% if neighbor['extra-import-prefixes'] %}{% for nm in neighbor['extra-import-prefixes'] %}{% if '/' in nm %}net ~ [ {{ nm }} ]{% else %}net ~ {{ nm | lower | replace('-', '_') }}{% endif %}{{ ' || ' if not loop.last }}{% endfor %}{% else %}false{% endif %}) then { }
@@ -75,6 +78,9 @@ filter {{ filter_prefix }}_in {
     }
   }
   # post import filter
+{% if neighbor['post-import-filter'] %}
+{{ neighbor['post-import-filter'] | trim | indent(2, first=True) }}
+{% endif %}
 
   # attr
   if blackhole_triggered then dest = RTD_BLACKHOLE;

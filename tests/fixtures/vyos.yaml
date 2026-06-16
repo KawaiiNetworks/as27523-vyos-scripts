@@ -94,6 +94,12 @@ router:
             in-prepend: "6939"
             out-prepend: "27523 27523"
             soft-reconfiguration-inbound: false
+            pre-import-filter: |
+              # runs before all standard import validation (bogon/IRR/RPKI/...)
+              if net ~ test_v4 then reject;
+            post-import-filter: |
+              # runs after standard validation, before the attribute section
+              if bgp_path.len > 64 then reject;
             pre-import-accept: |
               if path_contains_asn_set(test_as_path) then {
                 bgp_local_pref = 180;
