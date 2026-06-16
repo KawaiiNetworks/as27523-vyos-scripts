@@ -20,6 +20,14 @@ RESULTS_DIR = ROOT / "tests" / "results"      # gitignored scratch for generated
 EXPECTED_DIR = ROOT / "tests" / "expected"    # committed golden references
 
 # Set UPDATE_GOLDEN=1 to (re)write the golden files instead of comparing.
+#
+# AVOID THIS IN NORMAL USE. Blindly regenerating the golden files makes the test
+# meaningless — it will happily bless whatever the generator currently emits,
+# bugs included. The whole point is that a human vetted the expected output.
+# When the generator changes intentionally, hand-edit tests/expected/* to the
+# output you actually want, then run the test to confirm the generator matches.
+# Only reach for UPDATE_GOLDEN=1 to bootstrap a brand-new golden from scratch,
+# and review every line of the resulting diff before trusting it.
 UPDATE_GOLDEN = os.environ.get("UPDATE_GOLDEN") == "1"
 
 
@@ -244,8 +252,11 @@ class GeneratorCoverageTest(unittest.TestCase):
     def assertMatchesGolden(self, filename, content):
         """Assert `content` equals the committed golden tests/expected/<filename>.
 
-        With UPDATE_GOLDEN=1 the golden is (re)written instead of compared —
-        use that after an intentional generator change, then review the diff.
+        The golden is meant to be edited BY HAND so a human decides what correct
+        output looks like; the test then checks the generator produces exactly
+        that. UPDATE_GOLDEN=1 (re)writes the golden instead of comparing — avoid
+        it in normal use, since auto-blessing the current output defeats the
+        test. See the UPDATE_GOLDEN note at the top of this file.
         """
         golden = EXPECTED_DIR / filename
         if UPDATE_GOLDEN:
@@ -261,8 +272,9 @@ class GeneratorCoverageTest(unittest.TestCase):
             golden.read_text(),
             msg=(
                 f"generated {filename} differs from golden {golden}. If this "
-                "change is intended, regenerate with:\n"
-                "  UPDATE_GOLDEN=1 pixi run python -m unittest tests.test_generators"
+                "change is intended, hand-edit the golden to the output you want "
+                "and re-run the test to confirm — do NOT blindly regenerate with "
+                "UPDATE_GOLDEN=1 (that just blesses whatever the generator emits)."
             ),
         )
 

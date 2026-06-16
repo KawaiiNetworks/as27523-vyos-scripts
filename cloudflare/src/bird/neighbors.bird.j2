@@ -226,6 +226,9 @@ protocol bgp {{ proto_base }} {
     table vrf_{{ neighbor['_vrf'].id }}_v4;
 {% endif %}
     import filter {{ filter_prefix }}_in;
+{% if neighbor.get('keep-filtered', True) %}
+    import keep filtered on;
+{% endif %}
 {% if neighbor['default-originate'] %}
     export filter { if net = 0.0.0.0/0 then accept; reject; };
 {% else %}
@@ -254,6 +257,9 @@ protocol bgp {{ proto_base }} {
     table vrf_{{ neighbor['_vrf'].id }}_v6;
 {% endif %}
     import filter {{ filter_prefix }}_in;
+{% if neighbor.get('keep-filtered', True) %}
+    import keep filtered on;
+{% endif %}
 {% if neighbor['default-originate'] %}
     export filter { if net = ::/0 then accept; reject; };
 {% else %}
@@ -340,6 +346,9 @@ protocol bgp {{ proto_name }} {
     table vrf_{{ neighbor['_vrf'].id }}_v4;
 {% endif %}
     import filter {{ filter_prefix }}_in;
+{% if neighbor.get('keep-filtered', True) %}
+    import keep filtered on;
+{% endif %}
 {% if neighbor['default-originate'] %}
     export filter { if net = 0.0.0.0/0 then accept; reject; };
 {% else %}
@@ -369,6 +378,9 @@ protocol bgp {{ proto_name }} {
     table vrf_{{ neighbor['_vrf'].id }}_v6;
 {% endif %}
     import filter {{ filter_prefix }}_in;
+{% if neighbor.get('keep-filtered', True) %}
+    import keep filtered on;
+{% endif %}
 {% if neighbor['default-originate'] %}
     export filter { if net = ::/0 then accept; reject; };
 {% else %}

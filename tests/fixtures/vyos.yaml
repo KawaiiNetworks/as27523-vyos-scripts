@@ -115,6 +115,7 @@ router:
             description: Second upstream
             neighbor-address: 198.51.100.253
             source-address: 198.51.100.254
+            keep-filtered: false
 
         routeserver:
           - asn: 3491

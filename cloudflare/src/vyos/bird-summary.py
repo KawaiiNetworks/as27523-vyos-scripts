@@ -4,9 +4,9 @@
 Parses BIRD's `show protocols all` output into an aligned table with one row
 per protocol (name, proto, table/VRF, neighbor IP, state, info, uptime, and
 exported/imported/filtered route counts). Reads from stdin when piped, otherwise
-runs `birdc` itself. In a terminal it colours rows by state and pages long
-output through `less`, auto-closing the pager when the window is enlarged enough
-to fit the whole table.
+runs `birdc` itself. In a terminal it colours the State and Info columns by
+state and pages long output through `less`, auto-closing the pager when the
+window is enlarged enough to fit the whole table.
 """
 import os
 import re
@@ -16,7 +16,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 
-# ANSI colours, only emitted to a real terminal (less -R renders them).
+# ANSI colours for the State column, only emitted to a real terminal
+# (less -R renders them).
 RESET = "\033[0m"
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
@@ -154,7 +155,7 @@ def parse_bird_output(lines):
                     current_proto["Imported"] = imp_m.group(1)
 
                 filt_m = re.search(r"(\d+)\s+filtered", routes_str)
-                current_proto["Filtered"] = filt_m.group(1) if filt_m else "0"
+                current_proto["Filtered"] = filt_m.group(1) if filt_m else "-"
 
     if current_proto:
         protocols.append(current_proto)
@@ -162,24 +163,31 @@ def parse_bird_output(lines):
     return protocols
 
 
-def _row_color(proto):
-    """Pick a colour for a protocol row from its state/info (None = no colour)."""
-    state = proto["State"].lower()
-    info = proto["Info"].lower()
-    if state == "up" and "established" in info:
-        return GREEN
+def _name_sort_key(name):
+    """Natural sort key for protocol names so e.g. 'peer2' sorts before 'peer10'."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
+
+
+def _state_color(state):
+    """BIRD-style colour for a protocol state."""
+    state = state.lower()
     if state == "up":
-        # 'up' but not an Established BGP session (e.g. device/kernel/direct).
         return GREEN
     if state == "start":
         return YELLOW
     return RED  # down / disabled / anything else
 
 
+# Columns coloured (by state) in a terminal.
+COLOR_COLS = ("State", "Info")
+
+
 def generate_table_text(protocols, use_color):
     """Build the aligned table text (with a count footer)."""
     if not protocols:
         return "No protocols found.\n"
+
+    protocols = sorted(protocols, key=lambda p: _name_sort_key(p["Name"]))
 
     cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info",
             "Uptime", "Exported", "Imported", "Filtered"]
@@ -202,14 +210,21 @@ def generate_table_text(protocols, use_color):
             up += 1
         else:
             down += 1
-        row = format_str.format(*[p[col] for col in cols])
-        color = _row_color(p) if use_color else None
-        out.append(f"{color}{row}{RESET}" if color else row)
+        if use_color:
+            # Pad every cell, then wrap the padded coloured cells so column
+            # alignment is preserved (ANSI codes add no visible width).
+            color = _state_color(p["State"])
+            cells = [f"{str(p[col]):<{widths[col]}}" for col in cols]
+            for cc in COLOR_COLS:
+                idx = cols.index(cc)
+                cells[idx] = f"{color}{cells[idx]}{RESET}"
+            row = "  ".join(cells)
+        else:
+            row = format_str.format(*[p[col] for col in cols])
+        out.append(row)
 
     out.append("-" * len(header))
     footer = f"{len(protocols)} protocols  ({up} up, {down} down)"
-    if use_color:
-        footer = f"{len(protocols)} protocols  ({GREEN}{up} up{RESET}, {RED}{down} down{RESET})"
     out.append(footer)
 
     return "\n".join(out) + "\n"
@@ -252,7 +267,7 @@ def display_output(text):
         env["LESS"] = "-SRXF"
         pager_process = subprocess.Popen(["less"], stdin=subprocess.PIPE, text=True, env=env)
         pager_process.communicate(input=text)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, BrokenPipeError):
         pass
     except FileNotFoundError:
         print(text, end="")
