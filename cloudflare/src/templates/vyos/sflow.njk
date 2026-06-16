@@ -1,4 +1,5 @@
 delete system sflow
+set system sflow enable-egress
 set system sflow agent-address {{ sflow['agent-address'] }}
 {% for server in sflow.server %}
 set system sflow server {{ server.address }} port {{ server.port }}
@@ -11,6 +12,5 @@ set system sflow vpp
 delete vpp sflow interface
 {% for iface in sflow['vpp-interface'] %}
 set vpp sflow interface {{ iface }}
-set system sflow interface {{ iface }}
 {% endfor %}
 {% endif %}

@@ -59,8 +59,8 @@ describe("generator golden parity", () => {
     const conf = genBirdConfig(confCs, structuredClone(router), router["router-id"]);
 
     fs.mkdirSync(RESULTS, { recursive: true });
-    fs.writeFileSync(path.join(RESULTS, `ts.${scriptName}`), script);
-    fs.writeFileSync(path.join(RESULTS, `ts.${confName}`), conf);
+    fs.writeFileSync(path.join(RESULTS, scriptName), script);
+    fs.writeFileSync(path.join(RESULTS, confName), conf);
 
     assertMatchesGolden(scriptName, script);
     assertMatchesGolden(confName, conf);

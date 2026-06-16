@@ -35,6 +35,7 @@ set system task-scheduler task update-config executable path '/config/myapp/upda
 set system task-scheduler task update-config interval '12h'
 
 delete system sflow
+set system sflow enable-egress
 set system sflow agent-address 192.0.2.254
 set system sflow server 192.0.2.202 port 6343
 set system sflow interface eth0
@@ -42,7 +43,6 @@ set system sflow interface eth1
 set system sflow vpp
 delete vpp sflow interface
 set vpp sflow interface eth2
-set system sflow interface eth2
 delete service snmp
 set service snmp listen-address 192.0.2.254
 set service snmp location 'LAB'
