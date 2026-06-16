@@ -6,7 +6,6 @@ import { CacheStore } from "./cache.js";
 import {
   prepareForBird,
   birdImage,
-  birdMajor,
   ipv4ToEngineId,
 } from "./prepare.js";
 import { resolveRouterId } from "./github.js";
@@ -44,7 +43,6 @@ export function genBirdConfig(
     router_config: routerConfig,
     router_id: routerId ?? routerConfig["router-id"],
     local_asn: cs.localAsn,
-    bird_major: birdMajor(routerConfig),
     rpki_servers: routerConfig?.protocols?.rpki ?? [],
   });
 }

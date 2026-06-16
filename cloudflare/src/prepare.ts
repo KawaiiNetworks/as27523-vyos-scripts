@@ -536,7 +536,7 @@ export function prepareForBird(cs: CacheStore, routerConfig: any): void {
 }
 
 // ---------------------------------------------------------------------------
-// BIRD image / version
+// BIRD image
 // ---------------------------------------------------------------------------
 
 export function birdImage(routerConfig: any): string {
@@ -545,10 +545,4 @@ export function birdImage(routerConfig: any): string {
   const s = String(val).trim();
   if (/^\d+$/.test(s)) return `kawaiinetworks/bird:${s}`;
   return s;
-}
-
-export function birdMajor(routerConfig: any): number {
-  const tag = birdImage(routerConfig).split(":").pop() ?? "";
-  const m = tag.match(/^\d+/);
-  return m ? parseInt(m[0], 10) : 2;
 }
