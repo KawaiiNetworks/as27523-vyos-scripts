@@ -493,5 +493,5 @@ async def generate_router_script(cs, router_config, worker_base_url=""):
         router_config=router_config,
         router_id=router_id,
         configure_body=configure_body,
-        worker_base_url=worker_base_url
+        worker_base_url=worker_base_url,
     )

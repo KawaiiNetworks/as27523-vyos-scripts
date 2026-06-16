@@ -24,7 +24,6 @@ cat <<EOL > /config/myapp/update-config.sh
 #!/bin/bash
 
 wget -T 60 -O /config/myapp/configure.${ROUTER}.sh https://worker.example/kawaii/as27523/router/configure.${ROUTER}.sh
-wget -T 60 -O /config/myapp/find_unused.py https://worker.example/kawaii/as27523/find_unused.py
 vbash /config/myapp/configure.${ROUTER}.sh | tee /config/myapp/configure.log
 rm /config/myapp/configure.${ROUTER}.sh
 EOL
@@ -102,11 +101,22 @@ fi
 
 # Host convenience: a `birdc` wrapper on PATH opens the container's BIRD client
 # (works for any user, sudo and scripts, unlike a shell alias). Rewritten every
-# run via tee, so it is idempotent and always reflects the current command.
+# run via tee, so it is idempotent and always reflects the current command. A TTY
+# is allocated only when attached to one, so capturing its output through a pipe
+# (e.g. from bird-summary) works.
 sudo tee /usr/local/bin/birdc >/dev/null <<'EOF'
 #!/bin/sh
-exec sudo podman exec -it bird birdc -s /etc/bird/bird.ctl "$@"
+if [ -t 0 ] && [ -t 1 ]; then TTY=-it; else TTY=; fi
+exec sudo podman exec $TTY bird birdc -s /etc/bird/bird.ctl "$@"
 EOF
 sudo chmod +x /usr/local/bin/birdc
+
+# Host convenience: `bird-summary` — a compact one-row-per-protocol overview,
+# downloaded from the Worker (kept out of this script to stay readable).
+TMP_BS=$(mktemp)
+if curl -sSfL -o "$TMP_BS" "https://worker.example/kawaii/as27523/bird-summary"; then
+    sudo install -m 0755 "$TMP_BS" /usr/local/bin/bird-summary
+fi
+rm -f "$TMP_BS"
 
 exit

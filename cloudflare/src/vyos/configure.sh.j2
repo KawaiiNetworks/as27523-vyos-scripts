@@ -14,8 +14,8 @@ echo 'start configure'
 configure
 
 # update-config scheduler: refresh and re-apply this router's config every 12h.
-if [ ! -d "/config/myapp" ]; then
-    sudo mkdir -p /config/myapp
+if [ ! -d "/config/myapp/bird" ]; then
+    sudo mkdir -p /config/myapp/bird
 fi
 
 sudo chown vyos -R /config/myapp
@@ -24,7 +24,6 @@ cat <<EOL > /config/myapp/update-config.sh
 #!/bin/bash
 
 wget -T 60 -O /config/myapp/configure.${ROUTER}.sh {{ worker_base_url }}/router/configure.${ROUTER}.sh
-wget -T 60 -O /config/myapp/find_unused.py {{ worker_base_url }}/find_unused.py
 vbash /config/myapp/configure.${ROUTER}.sh | tee /config/myapp/configure.log
 rm /config/myapp/configure.${ROUTER}.sh
 EOL
@@ -49,7 +48,6 @@ commit
 # it, then swap it in atomically (mv = rename). A failed download OR a config
 # that does not parse must never clobber the working bird.conf — we only reload
 # BIRD once the new config is downloaded AND validated.
-mkdir -p /config/myapp/bird
 TMP_BIRD_CONF=$(mktemp /config/myapp/bird/.bird.conf.XXXXXX)
 if curl -sSfL -o "$TMP_BIRD_CONF" "{{ worker_base_url }}/router/bird.{{ router_config.name }}.conf"; then
     # /config/myapp/bird is mounted into the container at /etc/bird, so the temp
@@ -74,12 +72,23 @@ fi
 
 # Host convenience: a `birdc` wrapper on PATH opens the container's BIRD client
 # (works for any user, sudo and scripts, unlike a shell alias). Rewritten every
-# run via tee, so it is idempotent and always reflects the current command.
+# run via tee, so it is idempotent and always reflects the current command. A TTY
+# is allocated only when attached to one, so capturing its output through a pipe
+# (e.g. from bird-summary) works.
 sudo tee /usr/local/bin/birdc >/dev/null <<'EOF'
 #!/bin/sh
-exec sudo podman exec -it bird birdc -s /etc/bird/bird.ctl "$@"
+if [ -t 0 ] && [ -t 1 ]; then TTY=-it; else TTY=; fi
+exec sudo podman exec $TTY bird birdc -s /etc/bird/bird.ctl "$@"
 EOF
 sudo chmod +x /usr/local/bin/birdc
+
+# Host convenience: `bird-summary` — a compact one-row-per-protocol overview,
+# downloaded from the Worker (kept out of this script to stay readable).
+TMP_BS=$(mktemp)
+if curl -sSfL -o "$TMP_BS" "{{ worker_base_url }}/bird-summary"; then
+    sudo install -m 0755 "$TMP_BS" /usr/local/bin/bird-summary
+fi
+rm -f "$TMP_BS"
 
 exit
 
