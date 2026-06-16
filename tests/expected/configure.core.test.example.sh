@@ -76,7 +76,8 @@ commit
 # Download the generated BIRD config to a temp file in the SAME dir, syntax-check
 # it, then swap it in atomically (mv = rename). A failed download OR a config
 # that does not parse must never clobber the working bird.conf — we only reload
-# BIRD once the new config is downloaded AND validated.
+# BIRD once the new config is downloaded AND validated. Neither failure is fatal:
+# we just skip the reload, keep the existing config, and let the script continue.
 TMP_BIRD_CONF=$(mktemp /config/myapp/bird/.bird.conf.XXXXXX)
 if curl -sSfL -o "$TMP_BIRD_CONF" "https://worker.example/kawaii/as27523/router/bird.core.test.example.conf"; then
     # /config/myapp/bird is mounted into the container at /etc/bird, so the temp
@@ -92,12 +93,12 @@ if curl -sSfL -o "$TMP_BIRD_CONF" "https://worker.example/kawaii/as27523/router/
         sudo podman exec bird birdcl -s /etc/bird/bird.ctl configure || true
     else
         echo "new bird.conf failed 'bird -p' syntax check; keeping the existing config" >&2
-        rm -f "$TMP_BIRD_CONF"
     fi
 else
     echo "bird.conf download failed; keeping the existing config" >&2
-    rm -f "$TMP_BIRD_CONF"
 fi
+# Always remove the temp file — no-op if it was already mv'd into place above.
+rm -f "$TMP_BIRD_CONF"
 
 # Host convenience: a `birdc` wrapper on PATH opens the container's BIRD client
 # (works for any user, sudo and scripts, unlike a shell alias). Rewritten every
