@@ -214,6 +214,13 @@ protocol bgp {{ proto_base }} {
 {% endif %}
   local as {{ neighbor._local_as }};
   neighbor range {{ neighbor._dyn.rng }} as {{ asn }};
+{% if unnum %}
+  # Pin link-local sessions to this interface. Without it, multiple unnumbered
+  # roots all carry the same `neighbor range fe80::/64` and BIRD can't tell
+  # which interface an incoming/discovered fe80:: peer belongs to (a hub with
+  # several unnumbered peers would mis-dispatch or drop them).
+  interface "{{ unnum }}";
+{% endif %}
   dynamic name "{{ proto_base }}_";
   dynamic name digits 2;
 {% if unnum or not neighbor.multihop %}
