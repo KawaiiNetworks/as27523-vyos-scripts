@@ -1,10 +1,16 @@
 # neighbors.bird.j2
 # Per-session BGP inbound/outbound filters and protocol instances.
-{# A reject that, when record_import_filtered is on, logs the dropped route
-   (reason + session identity + prefix + as-path) before discarding it. Emitted
-   inline after `then`, so it expands to a `{ ...; reject; }` block. #}
+{# A reject that, when record_filtered is on, logs the dropped route (reason +
+   session identity + prefix + as-path) before discarding it. Emitted inline
+   after `then`, so it expands to a `{ ...; reject; }` block. #}
 {% macro filtered_reject(reason, ntype, asn, nid, neighbor) -%}
-{ if record_import_filtered then print "IMPORT-FILTERED {{ reason }} {{ ntype }} as{{ asn }} nid{{ nid }}{% if neighbor.description %} {{ neighbor.description | replace('"', "'") }}{% endif %}: ", net, " path ", bgp_path; reject; }
+{ if record_filtered then print "IMPORT-FILTERED {{ reason }} {{ ntype }} as{{ asn }} nid{{ nid }}{% if neighbor.description %} {{ neighbor.description | replace('"', "'") }}{% endif %}: ", net, " path ", bgp_path; reject; }
+{%- endmacro %}
+{# Like filtered_reject, but the reason is a BIRD string variable (e.g. the value
+   returned by autogen_filter_ebgp) rather than a compile-time literal. `tag`
+   distinguishes the direction (IMPORT-FILTERED vs EXPORT-FILTERED). #}
+{% macro filtered_reject_var(reason_var, ntype, asn, nid, neighbor, tag='IMPORT-FILTERED') -%}
+{ if record_filtered then print "{{ tag }} ", {{ reason_var }}, " {{ ntype }} as{{ asn }} nid{{ nid }}{% if neighbor.description %} {{ neighbor.description | replace('"', "'") }}{% endif %}: ", net, " path ", bgp_path; reject; }
 {%- endmacro %}
 {% macro render_neighbor_filters(ntype, neighbor) %}
 {% set asn = neighbor.asn if ntype != 'IBGP' else cs.local_asn %}
@@ -26,6 +32,9 @@
 # ---------------------------------------------------------------------------
 filter {{ filter_prefix }}_in {
   bool blackhole_triggered = check_blackhole();
+{% if 'no-in-filter' not in neighbor and ntype != 'IBGP' %}
+  string ebgp_reject_reason = "";
+{% endif %}
   # pre import filter
 
   # import filter
@@ -52,12 +61,15 @@ filter {{ filter_prefix }}_in {
       if !autogen_as{{ asn }}_validate_path() then {{ filtered_reject('as-path', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% if 'no-in-filter' not in neighbor %}
-{% if neighbor['_asn_public'] %}
-      if !{{ 'autogen_filter_ibgp()' if ntype == 'IBGP' else 'autogen_filter_ebgp()' }} then {{ filtered_reject('ibgp' if ntype == 'IBGP' else 'ebgp', ntype, asn, nid, neighbor) }}
+{% if ntype == 'IBGP' %}
+      if !autogen_filter_ibgp() then {{ filtered_reject('ibgp', ntype, asn, nid, neighbor) }}
 {% else %}
+{% if not neighbor['_asn_public'] %}
       # private ASN: its private ASNs are stripped from the as-path in the
       # attr section below.
-      if !autogen_filter_ebgp() then {{ filtered_reject('ebgp', ntype, asn, nid, neighbor) }}
+{% endif %}
+      ebgp_reject_reason = autogen_filter_ebgp();
+      if ebgp_reject_reason != "" then {{ filtered_reject_var('ebgp_reject_reason', ntype, asn, nid, neighbor) }}
 {% endif %}
 {% endif %}
     }
@@ -113,6 +125,9 @@ filter {{ filter_prefix }}_in {
 {% set is_simple = ntype == 'IBGP' and neighbor['simple-out'] %}
 filter {{ filter_prefix }}_out {
   bool blackhole_triggered = check_blackhole();
+{% if ntype != 'IBGP' %}
+  string ebgp_reject_reason = "";
+{% endif %}
   # pre export filter
 
   # export filter
@@ -136,7 +151,8 @@ filter {{ filter_prefix }}_out {
   # a /32 blackhole would otherwise be RPKI-invalid (more-specific than its ROA)
   # and dropped.
   if !blackhole_triggered then {
-    if !autogen_filter_ebgp() then reject;
+    ebgp_reject_reason = autogen_filter_ebgp();
+    if ebgp_reject_reason != "" then {{ filtered_reject_var('ebgp_reject_reason', ntype, asn, nid, neighbor, tag='EXPORT-FILTERED') }}
   }
 {% endif %}
 

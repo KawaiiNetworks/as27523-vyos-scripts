@@ -53,12 +53,16 @@ function autogen_filter_rfc7454() ->bool {
   return true;
 }
 
-function autogen_filter_ebgp() -> bool {
-  if !autogen_reject_bogons() then return false;
-  if !autogen_filter_rpki() then return false;
-  if !autogen_filter_blacklist() then return false;
-  if !autogen_filter_rfc7454() then return false;
-  return true;
+# Returns the name of the first eBGP content check that rejects the route, or
+# the empty string if it passes everything. Callers test `!= ""` as the reject
+# predicate and can log the returned reason (see record_filtered). Used by both
+# the per-neighbor import filter and the export content-hygiene gate.
+function autogen_filter_ebgp() -> string {
+  if !autogen_reject_bogons() then return "bogons";
+  if !autogen_filter_rpki() then return "rpki";
+  if !autogen_filter_blacklist() then return "blacklist";
+  if !autogen_filter_rfc7454() then return "rfc7454";
+  return "";
 }
 
 function autogen_filter_ibgp() -> bool {

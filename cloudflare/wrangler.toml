@@ -4,14 +4,14 @@ compatibility_date = "2024-12-01"
 compatibility_flags = ["python_workers"]
 
 # Bundle the BIRD/VyOS jinja2 templates (.j2), BIRD default snippets (.bird) and
-# the bird-summary helper as data modules so they can be read() at runtime.
-# (bird-summary.py is matched as Data here; its hyphen also keeps
-# find_additional_modules from treating it as an importable Python module.)
+# the birds helper as data modules so they can be read() at runtime.
+# (birds.py is matched as Data here so find_additional_modules does not treat it
+# as an importable Python module.)
 base_dir = "src"
 find_additional_modules = true
 
 [[rules]]
 type = "Data"
-globs = ["**/*.j2", "**/*.bird", "**/bird-summary.py"]
+globs = ["**/*.j2", "**/*.bird", "**/birds.py"]
 fallthrough = true
 

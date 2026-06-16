@@ -103,7 +103,7 @@ fi
 # (works for any user, sudo and scripts, unlike a shell alias). Rewritten every
 # run via tee, so it is idempotent and always reflects the current command. A TTY
 # is allocated only when attached to one, so capturing its output through a pipe
-# (e.g. from bird-summary) works.
+# (e.g. from birds) works.
 sudo tee /usr/local/bin/birdc >/dev/null <<'EOF'
 #!/bin/sh
 if [ -t 0 ] && [ -t 1 ]; then TTY=-it; else TTY=; fi
@@ -111,11 +111,11 @@ exec sudo podman exec $TTY bird birdc -s /etc/bird/bird.ctl "$@"
 EOF
 sudo chmod +x /usr/local/bin/birdc
 
-# Host convenience: `bird-summary` — a compact one-row-per-protocol overview,
+# Host convenience: `birds` — a compact one-row-per-protocol overview,
 # downloaded from the Worker (kept out of this script to stay readable).
 TMP_BS=$(mktemp)
-if curl -sSfL -o "$TMP_BS" "https://worker.example/kawaii/as27523/bird-summary"; then
-    sudo install -m 0755 "$TMP_BS" /usr/local/bin/bird-summary
+if curl -sSfL -o "$TMP_BS" "https://worker.example/kawaii/as27523/birds"; then
+    sudo install -m 0755 "$TMP_BS" /usr/local/bin/birds
 fi
 rm -f "$TMP_BS"
 

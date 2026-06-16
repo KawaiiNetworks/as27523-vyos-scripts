@@ -6,7 +6,7 @@ URL routing:
   GET /{user}/{config_repo}/router/configure.{name}.sh  → VyOS host setup script
                                                           (container, sflow, snmp, defaults)
   GET /{user}/{config_repo}/router/bird.{name}.conf     → generated bird.conf for the router
-  GET /{user}/{config_repo}/bird-summary                → bird-summary helper script (static)
+  GET /{user}/{config_repo}/birds                       → birds helper script (static)
 """
 
 import os
@@ -18,10 +18,10 @@ from cache import CacheStore
 from vyos_gen import generate_router_script, gen_bird_config
 from index_page import build_index_html
 
-# Static helper script the host downloads to /usr/local/bin/bird-summary. Read
+# Static helper script the host downloads to /usr/local/bin/birds. Read
 # lazily (like the jinja2 templates) so a bundling issue can't crash startup.
-_BIRD_SUMMARY_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "vyos", "bird-summary.py"
+_BIRDS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "vyos", "birds.py"
 )
 
 
@@ -76,9 +76,9 @@ async def _handle(request):
     config_repo = parts[1]
     resource = "/".join(parts[2:]) if len(parts) > 2 else ""
 
-    # --- Route: bird-summary helper (static; no config needed) ---
-    if resource == "bird-summary":
-        with open(_BIRD_SUMMARY_PATH, encoding="utf-8") as f:
+    # --- Route: birds helper (static; no config needed) ---
+    if resource == "birds":
+        with open(_BIRDS_PATH, encoding="utf-8") as f:
             return Response(
                 f.read(),
                 headers={"content-type": "text/x-python; charset=utf-8"},

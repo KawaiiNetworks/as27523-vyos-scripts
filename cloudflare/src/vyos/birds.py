@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bird-summary — a compact, human-friendly `birdc show protocols all` view.
+"""birds — a compact, human-friendly `birdc show protocols all` view.
 
 Parses BIRD's `show protocols all` output into an aligned table with one row
 per protocol (name, proto, table/VRF, neighbor IP, state, info, uptime, and
@@ -119,6 +119,13 @@ def parse_bird_output(lines):
                     since = f"{since} {time_match.group(1)}"
                     info = time_match.group(2)
 
+                # The Info column is a single token (e.g. 'Established', 'Idle');
+                # some protocols (BMP) append free-form detail after it — the
+                # real message is the `Last error:` detail line, so keep only the
+                # leading token here.
+                info_parts = info.split()
+                info = info_parts[0] if info_parts else ""
+
                 current_proto = {
                     "Name": name,
                     "Proto": proto,
@@ -126,9 +133,11 @@ def parse_bird_output(lines):
                     "NeighborIP": "-",
                     "State": state,
                     "Info": info if info else "-",
+                    "Last error": "-",
                     "Uptime": calculate_uptime(since),
                     "Exported": "-",
                     "Imported": "-",
+                    "ImportLimit": "-",
                     "Filtered": "-",
                 }
         else:
@@ -139,6 +148,10 @@ def parse_bird_output(lines):
 
             if line_stripped.startswith("Neighbor address:"):
                 current_proto["NeighborIP"] = line_stripped.split(":", 1)[1].strip()
+            elif line_stripped.startswith("Last error:"):
+                current_proto["Last error"] = line_stripped.split(":", 1)[1].strip()
+            elif line_stripped.startswith("Import limit:"):
+                current_proto["ImportLimit"] = line_stripped.split(":", 1)[1].strip()
             # Multi-channel protocols show '---' in the Table column; pull the
             # real table name from the first channel detail line instead.
             elif line_stripped.startswith("Table:") and current_proto["VRF"] == "---":
@@ -210,8 +223,13 @@ def generate_table_text(protocols, use_color):
 
     protocols = sorted(protocols, key=_sort_key)
 
-    cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info",
-            "Uptime", "Exported", "Imported", "Filtered"]
+    # Combine imported count and import limit into one cell, e.g. '155/1000'
+    # (or '155/-' when the channel has no import limit).
+    for p in protocols:
+        p["Import/Limit"] = f"{p['Imported']}/{p['ImportLimit']}" if p["Imported"] != "-" else "-"
+
+    cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info", "Last error",
+            "Uptime", "Import/Limit", "Exported", "Filtered"]
 
     widths = {col: len(col) for col in cols}
     widths["NeighborIP"] = max(widths["NeighborIP"], 15)
