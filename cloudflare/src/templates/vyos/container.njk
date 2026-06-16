@@ -9,6 +9,15 @@ set container name bird image '{{ bird_image }}'
 set container name bird allow-host-networks
 set container name bird memory 0
 set container name bird capability 'net-admin'
+{# net-raw: RAdv (unnumbered BGP auto-discovery) opens ICMPv6 raw sockets to
+   send/receive Router Advertisements; without CAP_NET_RAW the socket open is
+   denied and RAdv stays silently dead (TCP BGP is unaffected). #}
+set container name bird capability 'net-raw'
+{# net-bind-service: BGP listens on privileged port 179. It currently works via
+   podman's default capability set, but NET_RAW was already dropped from that
+   set once (breaking RAdv) — so declare every cap we depend on explicitly
+   rather than betting on the runtime defaults. #}
+set container name bird capability 'net-bind-service'
 set container name bird restart 'always'
 
 {# The image's ENTRYPOINT is `bird`; `command` supplies its arguments. `-s`

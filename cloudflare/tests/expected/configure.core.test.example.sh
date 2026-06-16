@@ -60,6 +60,8 @@ set container name bird image 'kawaiinetworks/bird:3'
 set container name bird allow-host-networks
 set container name bird memory 0
 set container name bird capability 'net-admin'
+set container name bird capability 'net-raw'
+set container name bird capability 'net-bind-service'
 set container name bird restart 'always'
 
 set container name bird command '-c /etc/bird/bird.conf -s /etc/bird/bird.ctl -d'
