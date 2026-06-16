@@ -14,7 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ANSI colours for the State column, only emitted to a real terminal
 # (less -R renders them).
@@ -52,7 +52,13 @@ def calculate_uptime(since_str):
     if since_str == "-" or not since_str:
         return "-"
 
-    now = datetime.now()
+    # BIRD may append sub-second precision (e.g. '09:00:15.559'); strptime's
+    # '%H:%M:%S' can't parse the fractional part, so drop it before parsing.
+    since_str = re.sub(r"(\d{2}:\d{2}:\d{2})\.\d+", r"\1", since_str)
+
+    # BIRD emits `Since` in UTC, so compare against UTC (held naive) — using
+    # local time would over-count uptime by the machine's UTC offset.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         if " " in since_str:
             date_part, time_part = since_str.split(" ", 1)
@@ -138,6 +144,7 @@ def parse_bird_output(lines):
                     "Exported": "-",
                     "Imported": "-",
                     "Filtered": "-",
+                    "Description": "-",
                 }
         else:
             if not current_proto:
@@ -147,6 +154,8 @@ def parse_bird_output(lines):
 
             if line_stripped.startswith("Neighbor address:"):
                 current_proto["NeighborIP"] = line_stripped.split(":", 1)[1].strip()
+            elif line_stripped.startswith("Description:"):
+                current_proto["Description"] = line_stripped.split(":", 1)[1].strip()
             elif line_stripped.startswith("Last error:"):
                 current_proto["Last error"] = line_stripped.split(":", 1)[1].strip()
             # Multi-channel protocols show '---' in the Table column; pull the
@@ -221,7 +230,7 @@ def generate_table_text(protocols, use_color):
     protocols = sorted(protocols, key=_sort_key)
 
     cols = ["Name", "Proto", "VRF", "NeighborIP", "State", "Info", "Last error",
-            "Uptime", "Imported", "Exported", "Filtered"]
+            "Uptime", "Imported", "Exported", "Filtered", "Description"]
 
     widths = {col: len(col) for col in cols}
     widths["NeighborIP"] = max(widths["NeighborIP"], 15)
