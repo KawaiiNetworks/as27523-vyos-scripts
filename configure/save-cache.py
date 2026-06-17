@@ -64,7 +64,7 @@ def validateASN(asn):
 
 
 # 每次批量请求的 ASN 数量上限（控制 URL 长度与单次响应大小）
-PDB_BATCH_SIZE = 20
+PDB_BATCH_SIZE = 10
 
 
 def pdb_private_info(asn):
@@ -234,14 +234,11 @@ def fetch_bgpq4_data(asn, as_set_list):
         cone += bgpq4_as_set_member(asset_name)
     cone = sorted(set(cone))
     data["cone_members"] = cone
-    print(f"    cone members: {len(cone)}")
 
     # 2. prefix4 / prefix6 (直接用 as{ASN})
     data["prefix4"] = bgpq4_prefix_matrix(4, f"as{asn}")
-    print(f"    prefix4: {len(data['prefix4'])} entries")
 
     data["prefix6"] = bgpq4_prefix_matrix(6, f"as{asn}")
-    print(f"    prefix6: {len(data['prefix6'])} entries")
 
     # 3. cone_prefix4 / cone_prefix6 (用 as-set 名)
     cone_p4 = []
@@ -255,7 +252,6 @@ def fetch_bgpq4_data(asn, as_set_list):
     cone_p6 = aggregate_prefixes_modified(cone_p6, 6)
     data["cone_prefix4"] = cone_p4
     data["cone_prefix6"] = cone_p6
-    print(f"    cone_prefix4: {len(cone_p4)}, cone_prefix6: {len(cone_p6)}")
 
     return data
 
@@ -442,10 +438,14 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
 
     def run_one(task):
         asn, path, as_set_list = task
-        print(f"  [bgpq4] AS{asn} (as-set: {as_set_list}) ...")
         data = fetch_bgpq4_data(asn, as_set_list)
         write_json(path, data)
-        return asn, path
+        summary = (
+            f"cone={len(data['cone_members'])} "
+            f"p4={len(data['prefix4'])} p6={len(data['prefix6'])} "
+            f"cone_p4={len(data['cone_prefix4'])} cone_p6={len(data['cone_prefix6'])}"
+        )
+        return path, summary
 
     # 并发执行 bgpq4 查询（每个 ASN 一个任务，I/O 密集，用线程池）
     with ThreadPoolExecutor(max_workers=BGPQ4_CONCURRENCY) as executor:
@@ -453,8 +453,8 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
         for future in as_completed(future_map):
             asn = future_map[future]
             try:
-                _, path = future.result()
-                print(f"  [OK] AS{asn} -> {path}")
+                path, summary = future.result()
+                print(f"  [OK] AS{asn} ({summary}) -> {path}")
                 success += 1
             except Exception as e:
                 print(f"  [FAIL] AS{asn}: {e}")
