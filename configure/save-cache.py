@@ -86,7 +86,7 @@ def fetch_pdb_info(asn):
     time.sleep(3)
     url = f"https://www.peeringdb.com/api/net?asn={asn}"
     print(f"  [PDB] Fetching AS{asn} ...")
-    headers = {}
+    headers = {"User-Agent": "KawaiiNetworks/vyos-scripts"}
     api_key = os.getenv("PEERINGDB_API_KEY")
     if api_key:
         headers["Authorization"] = f"Api-Key {api_key}"
