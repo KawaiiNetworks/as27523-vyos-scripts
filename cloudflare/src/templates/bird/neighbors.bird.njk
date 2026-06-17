@@ -182,6 +182,46 @@ filter {{ filter_prefix }}_out {
   accept;
 }
 {% endmacro %}
+{# One BGP channel (ipv4 or ipv6) for a session. Shared by the dynamic and
+   static protocol paths — their channels are identical save for `ext_nh`:
+   '' (no extended next hop), 'dyn' or 'static' pick the v4 RFC-8950 comment
+   wording (the dynamic session is always over IPv6; the static case may be
+   v4-over-v6). af is 4 or 6. #}
+{% macro bgp_channel(af, neighbor, ntype, filter_prefix, mp_in, mp_out, ext_nh) %}
+
+  ipv{{ af }} {
+{% if neighbor['_vrf'] %}
+    table vrf_{{ neighbor['_vrf'].id }}_v{{ af }};
+{% endif %}
+    import filter {{ filter_prefix }}_in;
+{% if neighbor._keep_filtered %}
+    import keep filtered on;
+{% endif %}
+{% if neighbor['default-originate'] %}
+    export filter { if net = {{ '0.0.0.0/0' if af == 4 else '::/0' }} then accept; reject; };
+{% else %}
+    export filter {{ filter_prefix }}_out;
+{% endif %}
+    next hop self;
+{% if af == 4 and ext_nh == 'dyn' %}
+    # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (session runs over IPv6).
+    extended next hop;
+{% elif af == 4 and ext_nh == 'static' %}
+    # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (unnumbered / v4-over-v6).
+    # Must be on the IPv4 channel; the session itself runs over IPv6.
+    extended next hop;
+{% endif %}
+{% if ntype in ['Peer', 'Downstream'] %}
+    import limit {{ mp_in[0] if af == 4 else mp_in[1] }} action disable;
+{% endif %}
+{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
+    export limit {{ mp_out[0] if af == 4 else mp_out[1] }} action disable;
+{% endif %}
+{% if neighbor.addpath %}
+    add paths tx;
+{% endif %}
+  };
+{%- endmacro %}
 
 {% macro render_neighbor_protocol(ntype, neighbor) %}
 {% set asn = neighbor._asn %}
@@ -241,63 +281,12 @@ protocol bgp {{ proto_base }} {
   password "{{ neighbor.password }}";
 {% endif %}
   graceful restart on;
+{% set dyn_ext_nh = 'dyn' if (unnum or neighbor._dyn.rng_v6 or neighbor['extended-nexthop']) else '' %}
 {% if neighbor._dyn.want4 %}
-
-  ipv4 {
-{% if neighbor['_vrf'] %}
-    table vrf_{{ neighbor['_vrf'].id }}_v4;
-{% endif %}
-    import filter {{ filter_prefix }}_in;
-{% if neighbor._keep_filtered %}
-    import keep filtered on;
-{% endif %}
-{% if neighbor['default-originate'] %}
-    export filter { if net = 0.0.0.0/0 then accept; reject; };
-{% else %}
-    export filter {{ filter_prefix }}_out;
-{% endif %}
-    next hop self;
-{% if unnum or neighbor._dyn.rng_v6 or neighbor['extended-nexthop'] %}
-    # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (session runs over IPv6).
-    extended next hop;
-{% endif %}
-{% if ntype in ['Peer', 'Downstream'] %}
-    import limit {{ mp_in[0] }} action disable;
-{% endif %}
-{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
-    export limit {{ mp_out[0] }} action disable;
-{% endif %}
-{% if neighbor.addpath %}
-    add paths tx;
-{% endif %}
-  };
+{{ bgp_channel(4, neighbor, ntype, filter_prefix, mp_in, mp_out, dyn_ext_nh) }}
 {% endif %}
 {% if neighbor._dyn.want6 %}
-
-  ipv6 {
-{% if neighbor['_vrf'] %}
-    table vrf_{{ neighbor['_vrf'].id }}_v6;
-{% endif %}
-    import filter {{ filter_prefix }}_in;
-{% if neighbor._keep_filtered %}
-    import keep filtered on;
-{% endif %}
-{% if neighbor['default-originate'] %}
-    export filter { if net = ::/0 then accept; reject; };
-{% else %}
-    export filter {{ filter_prefix }}_out;
-{% endif %}
-    next hop self;
-{% if ntype in ['Peer', 'Downstream'] %}
-    import limit {{ mp_in[1] }} action disable;
-{% endif %}
-{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
-    export limit {{ mp_out[1] }} action disable;
-{% endif %}
-{% if neighbor.addpath %}
-    add paths tx;
-{% endif %}
-  };
+{{ bgp_channel(6, neighbor, ntype, filter_prefix, mp_in, mp_out, '') }}
 {% endif %}
 {% if unnum %}
   neighbors { table unnumbered_{{ proto_base }}; export all; };
@@ -344,64 +333,12 @@ protocol bgp {{ ap.proto_name }} {
   keepalive time {{ neighbor.keepalive }};
 {% endif %}
   graceful restart on;
+{% set stat_ext_nh = 'static' if neighbor['extended-nexthop'] else '' %}
 {% if ap.want4 %}
-
-  ipv4 {
-{% if neighbor['_vrf'] %}
-    table vrf_{{ neighbor['_vrf'].id }}_v4;
-{% endif %}
-    import filter {{ filter_prefix }}_in;
-{% if neighbor._keep_filtered %}
-    import keep filtered on;
-{% endif %}
-{% if neighbor['default-originate'] %}
-    export filter { if net = 0.0.0.0/0 then accept; reject; };
-{% else %}
-    export filter {{ filter_prefix }}_out;
-{% endif %}
-    next hop self;
-{% if neighbor['extended-nexthop'] %}
-    # RFC 8950: accept IPv4 NLRI with an IPv6 next hop (unnumbered / v4-over-v6).
-    # Must be on the IPv4 channel; the session itself runs over IPv6.
-    extended next hop;
-{% endif %}
-{% if ntype in ['Peer', 'Downstream'] %}
-    import limit {{ mp_in[0] }} action disable;
-{% endif %}
-{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
-    export limit {{ mp_out[0] }} action disable;
-{% endif %}
-{% if neighbor.addpath %}
-    add paths tx;
-{% endif %}
-  };
+{{ bgp_channel(4, neighbor, ntype, filter_prefix, mp_in, mp_out, stat_ext_nh) }}
 {% endif %}
 {% if ap.want6 %}
-
-  ipv6 {
-{% if neighbor['_vrf'] %}
-    table vrf_{{ neighbor['_vrf'].id }}_v6;
-{% endif %}
-    import filter {{ filter_prefix }}_in;
-{% if neighbor._keep_filtered %}
-    import keep filtered on;
-{% endif %}
-{% if neighbor['default-originate'] %}
-    export filter { if net = ::/0 then accept; reject; };
-{% else %}
-    export filter {{ filter_prefix }}_out;
-{% endif %}
-    next hop self;
-{% if ntype in ['Peer', 'Downstream'] %}
-    import limit {{ mp_in[1] }} action disable;
-{% endif %}
-{% if ntype in ['Upstream', 'RouteServer', 'Peer'] %}
-    export limit {{ mp_out[1] }} action disable;
-{% endif %}
-{% if neighbor.addpath %}
-    add paths tx;
-{% endif %}
-  };
+{{ bgp_channel(6, neighbor, ntype, filter_prefix, mp_in, mp_out, '') }}
 {% endif %}
 }
 {% endfor %}

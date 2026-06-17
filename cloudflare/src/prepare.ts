@@ -143,6 +143,12 @@ function detectBadAsn(cs: CacheStore, asn: number): void {
     (coneList.length + 1 > memberLimit || cs.coneMembersExceeds.has(asn)) &&
     !largeAsList.includes(asn)
   ) {
+    const memberCount = coneList.length + 1;
+    const detail =
+      memberCount > memberLimit ? `${memberCount} members` : "trimmed in cache";
+    cs.warnings.push(
+      `AS-SET of AS${asn} exceeds the member limit of ${memberLimit} (${detail}), this session will be shutdown.`,
+    );
     cs.badAsnSet.add(asn);
   }
 
@@ -150,7 +156,14 @@ function detectBadAsn(cs: CacheStore, asn: number): void {
   for (const ipversion of [4, 6]) {
     const pm = cs.conePrefixMatrix(ipversion, asn);
     const exceeds = pm.length > prefixLimit || cs.conePrefixExceedsHas(ipversion, asn);
-    if (exceeds && !largeAsList.includes(asn)) cs.badAsnSet.add(asn);
+    if (exceeds && !largeAsList.includes(asn)) {
+      const detail =
+        pm.length > prefixLimit ? `${pm.length} prefixes` : "trimmed in cache";
+      cs.warnings.push(
+        `AS-SET of AS${asn} exceeds the IPv${ipversion} prefix limit of ${prefixLimit} (${detail}), this session will be shutdown.`,
+      );
+      cs.badAsnSet.add(asn);
+    }
   }
 }
 
