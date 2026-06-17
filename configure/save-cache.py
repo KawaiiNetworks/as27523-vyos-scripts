@@ -372,9 +372,8 @@ def save_pdb_cache(config_dir, all_asns, fill_missing):
         chunk = public_to_fetch[i : i + PDB_BATCH_SIZE]
         try:
             infos = fetch_pdb_batch(chunk)
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             print(f"  [FAIL] PDB batch {chunk}: {e}")
-            traceback.print_exc()
             failed += len(chunk)
             failed_asns.extend(chunk)
             continue
