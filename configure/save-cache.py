@@ -62,59 +62,33 @@ def validateASN(asn):
 # ---------------------------------------------------------------------------
 
 
-def fetch_pdb_info(asn):
-    """
-    从 PeeringDB 获取 ASN 信息，返回 dict。
-    对 private / not-found / 正常分别处理。
-    """
-    asn = int(asn)
-    asn_type = validateASN(asn)
+# 每次批量请求的 ASN 数量上限（控制 URL 长度与单次响应大小）
+PDB_BATCH_SIZE = 20
 
-    if asn_type == 0:
-        # Private ASN
-        return {
-            "type": "private",
-            "name": f"Private AS{asn}",
-            "as_set": [f"AS{asn}"],
-            "max_prefix": [100, 100],
-        }
-    elif asn_type != 1:
-        # Invalid / reserved / documentation
-        return None
 
-    # Public ASN — query PeeringDB
-    time.sleep(3)
-    url = f"https://www.peeringdb.com/api/net?asn={asn}"
-    print(f"  [PDB] Fetching AS{asn} ...")
-    headers = {"User-Agent": "KawaiiNetworks/vyos-scripts"}
-    api_key = os.getenv("PEERINGDB_API_KEY")
-    if api_key:
-        headers["Authorization"] = f"Api-Key {api_key}"
-        print("  [PDB] Using API KEY")
-    not_found = False
-    try:
-        resp = requests.get(url, timeout=15, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()["data"]
-        if not data:
-            raise IndexError("empty data")
-        response = data[0]
-    except requests.exceptions.HTTPError as e:
-        if e.response is None or e.response.status_code != 404:
-            print(f"  [PDB] AS{asn} HTTP error from PeeringDB: {e}")
-            return None
-        not_found = True
-    except (IndexError, KeyError):
-        not_found = True
+def pdb_private_info(asn):
+    """Private ASN 的本地信息，无需查询 PeeringDB。"""
+    return {
+        "type": "private",
+        "name": f"Private AS{asn}",
+        "as_set": [f"AS{asn}"],
+        "max_prefix": [100, 100],
+    }
 
-    if not_found:
-        print(f"  [PDB] AS{asn} not found in PeeringDB")
-        return {
-            "type": "not_found",
-            "name": f"Nonexistent AS{asn}",
-            "as_set": [f"AS{asn}"],
-            "max_prefix": [100, 100],
-        }
+
+def pdb_not_found_info(asn):
+    """在 PeeringDB 中查不到的 ASN 的占位信息。"""
+    return {
+        "type": "not_found",
+        "name": f"Nonexistent AS{asn}",
+        "as_set": [f"AS{asn}"],
+        "max_prefix": [100, 100],
+    }
+
+
+def parse_pdb_net(response):
+    """解析单条 PeeringDB net 记录为缓存 dict。"""
+    asn = int(response["asn"])
 
     # max prefix
     max_p4 = response.get("info_prefixes4") or 0
@@ -143,6 +117,40 @@ def fetch_pdb_info(asn):
 
 
 # ---------------------------------------------------------------------------
+def pdb_headers():
+    headers = {"User-Agent": "KawaiiNetworks/vyos-scripts"}
+    api_key = os.getenv("PEERINGDB_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Api-Key {api_key}"
+    return headers
+
+
+def fetch_pdb_batch(asns):
+    """
+    批量从 PeeringDB 查询一组公共 ASN（validateASN == 1）。
+    使用 asn__in 一次请求多个 ASN，返回 dict {asn: info_dict}。
+    在 PeeringDB 中查不到的 ASN 标记为 not_found。
+    单次请求失败会抛出异常，由调用方处理整批。
+    """
+    asn_param = ",".join(str(a) for a in asns)
+    url = f"https://www.peeringdb.com/api/net?asn__in={asn_param}"
+    print(f"  [PDB] Fetching {len(asns)} ASNs: {asns}")
+    time.sleep(3)
+    resp = requests.get(url, timeout=30, headers=pdb_headers())
+    resp.raise_for_status()
+    data = resp.json()["data"]
+
+    found = {int(record["asn"]): parse_pdb_net(record) for record in data}
+    result = {}
+    for asn in asns:
+        if asn in found:
+            result[asn] = found[asn]
+        else:
+            print(f"  [PDB] AS{asn} not found in PeeringDB")
+            result[asn] = pdb_not_found_info(asn)
+    return result
+
+
 # bgpq4 helpers
 # ---------------------------------------------------------------------------
 
@@ -343,25 +351,44 @@ def save_pdb_cache(config_dir, all_asns, fill_missing):
         path = pdb_cache_path(cache_dir, asn)
 
         if fill_missing and os.path.isfile(path):
+    public_to_fetch = []
             skipped += 1
             continue
 
         asn_type = validateASN(asn)
-        if asn_type not in (0, 1):
+        if asn_type == 0:
+            # Private ASN — no network query needed
+            write_json(path, pdb_private_info(asn))
+            print(f"  [OK] AS{asn} (private) -> {path}")
+            success += 1
+        elif asn_type == 1:
+            public_to_fetch.append(asn)
+        else:
             print(f"  [SKIP] AS{asn}: invalid/reserved ASN (type={asn_type})")
             skipped += 1
-            continue
 
         try:
-            info = fetch_pdb_info(asn)
+            infos = fetch_pdb_batch(chunk)
+        except Exception as e:
+            print(f"  [FAIL] PDB batch {chunk}: {e}")
+            traceback.print_exc()
+            failed += len(chunk)
+            failed_asns.extend(chunk)
+            continue
+        for asn in chunk:
+            info = infos.get(asn)
             if info is None:
                 failed += 1
+    # Public ASNs — batch query PeeringDB via asn__in
+    for i in range(0, len(public_to_fetch), PDB_BATCH_SIZE):
+        chunk = public_to_fetch[i : i + PDB_BATCH_SIZE]
                 failed_asns.append(asn)
                 continue
             write_json(path, info)
             print(f"  [OK] AS{asn} -> {path}")
             success += 1
         except Exception as e:
+            path = pdb_cache_path(cache_dir, asn)
             print(f"  [FAIL] AS{asn}: {e}")
             traceback.print_exc()
             failed += 1
@@ -416,11 +443,6 @@ def save_bgpq4_cache(config_dir, peer_downstream_asns, fill_missing):
             write_json(path, data)
             print(f"  [OK] AS{asn} -> {path}")
             success += 1
-        except Exception as e:
-            print(f"  [FAIL] AS{asn}: {e}")
-            traceback.print_exc()
-            failed += 1
-            failed_asns.append(asn)
 
     print(f"\nbgpq4 summary: {success} updated, {skipped} skipped, {failed} failed")
     if failed_asns:
