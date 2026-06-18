@@ -130,6 +130,9 @@ filter {{ filter_prefix }}_out {
   string ebgp_reject_reason = "";
 {% endif %}
   # pre export filter
+{% if neighbor['pre-export-filter'] %}
+{{ neighbor['pre-export-filter'] | trim | indent(2, true) }}
+{% endif %}
 
   # export filter
 {% if ntype == 'IBGP' %}
@@ -165,6 +168,9 @@ filter {{ filter_prefix }}_out {
   if (bgp_large_community ~ large_community_ola_all) && !((large_community_only_announce_to_as({{ asn }}) ~ bgp_large_community) || (large_community_only_announce_to_neighbor_id({{ nid }}) ~ bgp_large_community)) then reject;
 {% endif %}
   # post export filter
+{% if neighbor['post-export-filter'] %}
+{{ neighbor['post-export-filter'] | trim | indent(2, true) }}
+{% endif %}
 
   # attr
 {% if not is_simple and neighbor._out_prepend %}

@@ -100,6 +100,12 @@ router:
             post-import-filter: |
               # runs after standard validation, before the attribute section
               if bgp_path.len > 64 then reject;
+            pre-export-filter: |
+              # runs before all standard export validation (no-leak/bogon/RPKI/...)
+              if net ~ test_v4 then reject;
+            post-export-filter: |
+              # runs after standard export validation, before the attribute section
+              if bgp_path.len > 64 then reject;
             pre-import-accept: |
               if path_contains_asn_set(test_as_path) then {
                 bgp_local_pref = 180;
