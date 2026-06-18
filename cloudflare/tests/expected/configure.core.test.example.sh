@@ -26,6 +26,7 @@ cat <<EOL > /config/myapp/update-config.sh
 wget -T 60 -O /config/myapp/configure.${ROUTER}.sh https://worker.example/kawaii/as27523/router/configure.${ROUTER}.sh
 vbash /config/myapp/configure.${ROUTER}.sh | tee /config/myapp/configure.log
 rm /config/myapp/configure.${ROUTER}.sh
+sudo chown vyos -R /config/myapp
 EOL
 
 chmod +x /config/myapp/update-config.sh
