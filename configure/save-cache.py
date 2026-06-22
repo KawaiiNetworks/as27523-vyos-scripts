@@ -592,10 +592,70 @@ def build_summary(config_dir, subdir, config=None):
     print(msg)
 
 
+def strip_asset_source(asset_name):
+    """Drop IRR source prefixes such as ARIN::AS-FOO for ARIN's API."""
+    return asset_name.split("::")[-1]
+
+
+def first_pdb_asset_name(cache_dir, asn):
+    pdb_data = load_json(pdb_cache_path(cache_dir, asn))
+    if pdb_data and "as_set" in pdb_data and pdb_data["as_set"]:
+        return strip_asset_source(pdb_data["as_set"][0])
+    return f"AS{asn}"
+
+
+def large_as_set(config):
+    large_as_list = set()
+    for asn in config.get("as-set-limit", {}).get("large-as-list", []):
+        try:
+            large_as_list.add(int(asn))
+        except (TypeError, ValueError):
+            print(f"  [WARN] Ignoring invalid large-as-list entry: {asn!r}")
+    return large_as_list
+
+
+def bgpq4_exceeds_limits(config, bgpq4_data):
+    if not bgpq4_data:
+        return []
+
+    reasons = []
+    as_set_limit = config.get("as-set-limit", {})
+    member_limit = as_set_limit.get("member-limit")
+    prefix_limit = as_set_limit.get("prefix-limit")
+
+    if bgpq4_data.get("cone_members_exceeds"):
+        reasons.append("member limit")
+    elif member_limit is not None:
+        try:
+            if len(bgpq4_data.get("cone_members", [])) + 1 > int(member_limit):
+                reasons.append("member limit")
+        except (TypeError, ValueError):
+            print(f"  [WARN] Ignoring invalid member-limit: {member_limit!r}")
+
+    for ipversion in (4, 6):
+        key = f"cone_prefix{ipversion}"
+        exceeds_key = f"{key}_exceeds"
+        if bgpq4_data.get(exceeds_key):
+            reasons.append(f"IPv{ipversion} prefix limit")
+            continue
+        if prefix_limit is None:
+            continue
+        try:
+            if len(bgpq4_data.get(key, [])) > int(prefix_limit):
+                reasons.append(f"IPv{ipversion} prefix limit")
+        except (TypeError, ValueError):
+            print(f"  [WARN] Ignoring invalid prefix-limit: {prefix_limit!r}")
+            break
+
+    return reasons
+
+
 def update_arin_asset_members(config_dir, config):
     """
-    Update ARIN AS-SET members with downstream ASNs if the API key is valid
-    and the local AS-SET is managed by ARIN.
+    Sync ARIN AS-SET members with eligible downstream ASNs.
+
+    Downstreams whose bgpq4 cone exceeds configured limits are excluded unless
+    their ASN is listed in as-set-limit.large-as-list.
     """
     api_key = os.getenv("ARIN_API_KEY")
     if not api_key:
@@ -609,11 +669,7 @@ def update_arin_asset_members(config_dir, config):
     cache_dir = os.path.join(config_dir, "cache")
     local_asn = config["local-asn"]
 
-    local_pdb = load_json(pdb_cache_path(cache_dir, local_asn))
-    if local_pdb and "as_set" in local_pdb and local_pdb["as_set"]:
-        target_asset_name = local_pdb["as_set"][0].split("::")[-1]
-    else:
-        target_asset_name = f"AS{local_asn}"
+    target_asset_name = first_pdb_asset_name(cache_dir, local_asn)
 
     print(f"  Target Local AS-SET: {target_asset_name}")
 
@@ -642,7 +698,9 @@ def update_arin_asset_members(config_dir, config):
         members_container = root.find("ns:members", namespaces)
         if members_container is not None:
             for member in members_container.findall("ns:member", namespaces):
-                current_members.add(member.get("name"))
+                name = member.get("name")
+                if name:
+                    current_members.add(name)
 
         print(f"  Current ARIN members: {sorted(list(current_members))}")
 
@@ -651,6 +709,15 @@ def update_arin_asset_members(config_dir, config):
         return False
 
     downstream_asset_members_map = {}
+    excluded_downstream_members = {}
+    bgpq4_summary_path = os.path.join(cache_dir, "bgpq4", "summary.json")
+    bgpq4_summary = load_json(bgpq4_summary_path)
+    if bgpq4_summary is None:
+        print(
+            f"  [FAIL] Skipping ARIN update: bgpq4 summary not found at {bgpq4_summary_path}"
+        )
+        return False
+    large_as_list = large_as_set(config)
 
     if "router" in config:
         for router in config["router"]:
@@ -662,37 +729,65 @@ def update_arin_asset_members(config_dir, config):
                 for neighbor in router["protocols"]["bgp"]["downstream"]:
                     if "asn" not in neighbor:
                         continue
-                    ds_asn = neighbor["asn"]
+                    ds_asn = int(neighbor["asn"])
 
                     if validateASN(ds_asn) != 1:
                         continue
 
-                    ds_pdb = load_json(pdb_cache_path(cache_dir, ds_asn))
-                    if ds_pdb and "as_set" in ds_pdb and ds_pdb["as_set"]:
-                        ds_member_name = ds_pdb["as_set"][0].split("::")[-1]
-                        downstream_asset_members_map[ds_asn] = ds_member_name
-                    else:
-                        downstream_asset_members_map[ds_asn] = f"AS{ds_asn}"
+                    ds_bgpq4_data = bgpq4_summary.get(str(ds_asn))
+                    if ds_bgpq4_data is None:
+                        print(
+                            f"  [FAIL] Skipping ARIN update: no bgpq4 summary found for AS{ds_asn}"
+                        )
+                        return False
 
-    expected_members = set(downstream_asset_members_map.values())
+                    ds_member_name = first_pdb_asset_name(cache_dir, ds_asn)
+                    exceed_reasons = bgpq4_exceeds_limits(config, ds_bgpq4_data)
+
+                    if exceed_reasons and ds_asn not in large_as_list:
+                        excluded_downstream_members[ds_asn] = {
+                            "member": ds_member_name,
+                            "reasons": exceed_reasons,
+                        }
+                        continue
+
+                    downstream_asset_members_map[ds_asn] = ds_member_name
+
+    local_member_name = f"AS{local_asn}"
+    expected_members = {local_member_name, *downstream_asset_members_map.values()}
+    print(f"  Expected Local AS member: {local_member_name}")
     print(
-        f"  Expected Downstream members from config: {sorted(list(expected_members))}"
+        "  Expected Downstream members from config: "
+        f"{sorted(list(downstream_asset_members_map.values()))}"
     )
+    for ds_asn, info in sorted(excluded_downstream_members.items()):
+        print(
+            f"  [SKIP] AS{ds_asn} ({info['member']}): "
+            f"exceeds {', '.join(info['reasons'])} and is not in large-as-list"
+        )
 
     members_to_add = expected_members - current_members
+    members_to_remove = current_members - expected_members
 
-    if not members_to_add:
-        print("  [OK] ARIN AS-SET is up to date. No new members to add.")
+    if not members_to_add and not members_to_remove:
+        print("  [OK] ARIN AS-SET is up to date.")
         return True
 
-    print(f"  Adding missing members to ARIN AS-SET: {members_to_add}")
+    if members_to_add:
+        print(f"  Adding missing members to ARIN AS-SET: {sorted(members_to_add)}")
+    if members_to_remove:
+        print(f"  Removing extra members from ARIN AS-SET: {sorted(members_to_remove)}")
 
     ns_url = namespaces["ns"]
     if members_container is None:
         members_container = ET.Element(f"{{{ns_url}}}members")
         root.append(members_container)
 
-    for new_member in members_to_add:
+    for member in list(members_container.findall("ns:member", namespaces)):
+        if member.get("name") in members_to_remove:
+            members_container.remove(member)
+
+    for new_member in sorted(members_to_add):
         new_elem = ET.Element(f"{{{ns_url}}}member")
         new_elem.set("name", new_member)
         members_container.append(new_elem)
