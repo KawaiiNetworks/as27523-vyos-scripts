@@ -115,12 +115,19 @@ exec sudo podman exec $TTY bird birdc -s /etc/bird/bird.ctl "$@"
 EOF
 sudo chmod +x /usr/local/bin/birdc
 
-# Host convenience: `birds` — a compact one-row-per-protocol overview,
-# downloaded from the Worker (kept out of this script to stay readable).
-TMP_BS=$(mktemp)
-if curl -sSfL -o "$TMP_BS" "https://worker.example/kawaii/as27523/birds"; then
-    sudo install -m 0755 "$TMP_BS" /usr/local/bin/birds
-fi
-rm -f "$TMP_BS"
+install_worker_bin() {
+    local resource="$1"
+    local bin="$2"
+    local tmp
+    tmp=$(mktemp)
+    if curl -sSfL -o "$tmp" "https://worker.example/kawaii/as27523/${resource}"; then
+        sudo install -m 0755 "$tmp" "/usr/local/bin/${bin}"
+    fi
+    rm -f "$tmp"
+}
+
+# Host convenience helpers downloaded from the Worker.
+install_worker_bin birds birds
+install_worker_bin vpptop vpptop
 
 exit

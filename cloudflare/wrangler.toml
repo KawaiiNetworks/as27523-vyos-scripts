@@ -11,8 +11,8 @@ compatibility_flags = ["nodejs_compat"]
 [build]
 command = "node scripts/precompile-templates.mjs"
 
-# The birds helper is imported as a Text module (served verbatim).
+# Helper scripts are imported as Text modules (served verbatim).
 [[rules]]
 type = "Text"
-globs = ["**/birds.py"]
+globs = ["**/templates/vyos/*.py"]
 fallthrough = true

@@ -6,6 +6,7 @@
  *   GET /{user}/{config_repo}/router/configure.{name}.sh  → VyOS host setup script
  *   GET /{user}/{config_repo}/router/bird.{name}.conf     → generated bird.conf
  *   GET /{user}/{config_repo}/birds                       → birds helper script (static)
+ *   GET /{user}/{config_repo}/vpptop                      → vpptop helper script (static)
  */
 
 import { loadYamlConfig, resolveRouterId } from "./github.js";
@@ -13,8 +14,9 @@ import { CacheStore } from "./cache.js";
 import { genBirdConfig, generateRouterScript } from "./generate.js";
 import { buildIndexHtml } from "./indexPage.js";
 
-// Static helper script the host downloads to /usr/local/bin/birds.
+// Static helper scripts the host downloads to /usr/local/bin.
 import birdsScript from "./templates/vyos/birds.py";
+import vpptopScript from "./templates/vyos/vpptop.py";
 
 function text(body: string, status = 200, contentType = "text/plain"): Response {
   // Every response is generated fresh from the current GitHub state, so no layer
@@ -46,7 +48,9 @@ async function handle(request: Request): Promise<Response> {
       "Usage: /{user}/{config_repo}/\n\n" +
         "Resources:\n" +
         "  router/configure.{name}.sh\n" +
-        "  router/bird.{name}.conf\n",
+        "  router/bird.{name}.conf\n" +
+        "  birds\n" +
+        "  vpptop\n",
     );
   }
 
@@ -55,9 +59,12 @@ async function handle(request: Request): Promise<Response> {
   const configRepo = parts[1];
   const resource = parts.length > 2 ? parts.slice(2).join("/") : "";
 
-  // --- Route: birds helper (static; no config needed) ---
+  // --- Routes: helper scripts (static; no config needed) ---
   if (resource === "birds") {
     return text(birdsScript, 200, "text/x-python; charset=utf-8");
+  }
+  if (resource === "vpptop") {
+    return text(vpptopScript, 200, "text/x-python; charset=utf-8");
   }
 
   const config = await loadYamlConfig(user, configRepo);
