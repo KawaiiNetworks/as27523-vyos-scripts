@@ -53,7 +53,7 @@ SW_DROP_COUNTERS = [C_DROPS]
 Snap = namedtuple("Snap", "mono rx tx simples")
 Row = namedtuple(
     "Row",
-    "idx name rx_bps rx_pps tx_bps tx_pps "
+    "idx name rx_bps rx_pps rx_avg_size tx_bps tx_pps tx_avg_size "
     "rx_drop_pps tx_drop_pps sw_drop_pps "
     "rx_drop_cum tx_drop_cum sw_drop_cum",
 )
@@ -277,6 +277,8 @@ def compute(prev, cur, names, wire):
         tx_bps = (d_txb + oh * d_txp) * 8 / dt
         rx_pps = d_rxp / dt
         tx_pps = d_txp / dt
+        rx_avg_size = (d_rxb / d_rxp + oh) if d_rxp else 0
+        tx_avg_size = (d_txb / d_txp + oh) if d_txp else 0
 
         def cum(counters):
             return sum(cur.simples.get(n, {}).get(idx, 0) for n in counters)
@@ -292,7 +294,7 @@ def compute(prev, cur, names, wire):
         sw_drop_pps = nz(sw_drop_cum - prv(SW_DROP_COUNTERS)) / dt
 
         rows.append(Row(idx, names.get(idx, "if%d" % idx),
-                        rx_bps, rx_pps, tx_bps, tx_pps,
+                        rx_bps, rx_pps, rx_avg_size, tx_bps, tx_pps, tx_avg_size,
                         rx_drop_pps, tx_drop_pps, sw_drop_pps,
                         rx_drop_cum, tx_drop_cum, sw_drop_cum))
     return rows, dt
@@ -380,6 +382,14 @@ def hpps(v):
     return "%6.2f Tpps" % v
 
 
+def hbytes(v):
+    for u in ("B", "KB", "MB", "GB"):
+        if v < 1000:
+            return "%5.1f %s" % (v, u)
+        v /= 1000.0
+    return "%5.1f TB" % v
+
+
 def hcount(v):
     for u in ("", "K", "M", "G", "T"):
         if abs(v) < 1000:
@@ -400,15 +410,19 @@ def iface_columns(detail):
         ("",   "IFACE",     -16, lambda r: r.name),
         ("RX", "RX bw",      13, lambda r: hbits(r.rx_bps)),
         ("RX", "RX pps",     12, lambda r: hpps(r.rx_pps)),
-        ("RX", "RX hwdrop/s", 12, lambda r: hpps(r.rx_drop_pps)),
     ]
+    if detail:
+        cols.append(("RX", "RX avgB",      8, lambda r: hbytes(r.rx_avg_size)))
+    cols.append(("RX", "RX hwdrop/s", 12, lambda r: hpps(r.rx_drop_pps)))
     if detail:
         cols.append(("RX", "RX swdrop/s", 12, lambda r: hpps(r.sw_drop_pps)))
     cols += [
         ("TX", "TX bw",      13, lambda r: hbits(r.tx_bps)),
         ("TX", "TX pps",     12, lambda r: hpps(r.tx_pps)),
-        ("TX", "TX hwdrop/s", 12, lambda r: hpps(r.tx_drop_pps)),
     ]
+    if detail:
+        cols.append(("TX", "TX avgB",      8, lambda r: hbytes(r.tx_avg_size)))
+    cols.append(("TX", "TX hwdrop/s", 12, lambda r: hpps(r.tx_drop_pps)))
     return cols
 
 
@@ -478,9 +492,13 @@ def rank_group():
 
 
 def totals_row(rows):
+    rx_bps = sum(r.rx_bps for r in rows)
+    rx_pps = sum(r.rx_pps for r in rows)
+    tx_bps = sum(r.tx_bps for r in rows)
+    tx_pps = sum(r.tx_pps for r in rows)
     return Row(-1, "TOTAL",
-               sum(r.rx_bps for r in rows), sum(r.rx_pps for r in rows),
-               sum(r.tx_bps for r in rows), sum(r.tx_pps for r in rows),
+               rx_bps, rx_pps, rx_bps / rx_pps / 8 if rx_pps else 0,
+               tx_bps, tx_pps, tx_bps / tx_pps / 8 if tx_pps else 0,
                sum(r.rx_drop_pps for r in rows), sum(r.tx_drop_pps for r in rows),
                sum(r.sw_drop_pps for r in rows),
                sum(r.rx_drop_cum for r in rows), sum(r.tx_drop_cum for r in rows),
